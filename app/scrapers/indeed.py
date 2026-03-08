@@ -7,7 +7,7 @@ from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
 
-SEARCH_KEYWORDS = [
+DEFAULT_KEYWORDS = [
     "devops engineer remote",
     "SRE remote",
     "infrastructure engineer remote",
@@ -20,9 +20,10 @@ class IndeedScraper(BaseScraper):
     source_name = "indeed"
 
     async def scrape(self) -> list[JobListing]:
+        keywords = self.search_terms if self.search_terms else DEFAULT_KEYWORDS
         jobs = []
         async with self.get_client() as client:
-            for keyword in SEARCH_KEYWORDS:
+            for keyword in keywords:
                 url = f"https://www.indeed.com/rss?q={quote_plus(keyword)}&l=remote&sort=date"
                 try:
                     resp = await client.get(url)

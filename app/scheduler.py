@@ -5,11 +5,11 @@ from app.database import Database, make_dedup_hash
 logger = logging.getLogger(__name__)
 
 
-async def run_scrape_cycle(db: Database, scrapers: list) -> int:
+async def run_scrape_cycle(db: Database, scrapers: list, search_terms: list[str] | None = None) -> int:
     total_new = 0
     for scraper_instance in scrapers:
         if isinstance(scraper_instance, type):
-            scraper_instance = scraper_instance()
+            scraper_instance = scraper_instance(search_terms=search_terms)
         source_name = scraper_instance.source_name
         logger.info(f"Scraping {source_name}...")
         try:

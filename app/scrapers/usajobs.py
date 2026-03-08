@@ -25,8 +25,12 @@ class USAJobsScraper(BaseScraper):
             "Host": "data.usajobs.gov",
         }
 
+        keyword = "information technology"
+        if self.search_terms:
+            keyword = " ".join(self.search_terms[:3])
+
         params = {
-            "Keyword": "information technology",
+            "Keyword": keyword,
             "JobCategoryCode": "2210",
             "RemoteIndicator": "True",
             "ResultsPerPage": 50,

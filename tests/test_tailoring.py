@@ -14,9 +14,7 @@ MOCK_TAILORED = {
 @pytest.mark.asyncio
 async def test_tailor_generates_materials():
     mock_client = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=json.dumps(MOCK_TAILORED))]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_client.chat = AsyncMock(return_value=json.dumps(MOCK_TAILORED))
 
     tailor = Tailor(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await tailor.prepare(
@@ -33,7 +31,7 @@ async def test_tailor_generates_materials():
 @pytest.mark.asyncio
 async def test_tailor_handles_error():
     mock_client = MagicMock()
-    mock_client.messages.create = AsyncMock(side_effect=Exception("API error"))
+    mock_client.chat = AsyncMock(side_effect=Exception("API error"))
 
     tailor = Tailor(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await tailor.prepare("job desc", [], [])
@@ -44,9 +42,7 @@ async def test_tailor_handles_error():
 @pytest.mark.asyncio
 async def test_tailor_handles_bad_json():
     mock_client = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = [MagicMock(text="not valid json")]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_client.chat = AsyncMock(return_value="not valid json")
 
     tailor = Tailor(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await tailor.prepare("job desc", [], [])

@@ -50,6 +50,42 @@ const api = {
     draftEmail(id) {
         return this.request('POST', `/api/jobs/${id}/email`);
     },
+
+    getSearchConfig() {
+        return this.request('GET', '/api/search-config');
+    },
+
+    updateSearchTerms(terms) {
+        return this.request('POST', '/api/search-config/terms', { search_terms: terms });
+    },
+
+    async uploadResume(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/resume/upload', { method: 'POST', body: formData });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(err.detail || `Upload failed: ${res.status}`);
+        }
+        return res.json();
+    },
+
+    getAISettings() {
+        return this.request('GET', '/api/ai-settings');
+    },
+
+    updateAISettings(settings) {
+        return this.request('POST', '/api/ai-settings', settings);
+    },
+
+    testAIConnection(settings) {
+        return this.request('POST', '/api/ai-settings/test', settings);
+    },
+
+    getOllamaModels(baseUrl) {
+        const qs = new URLSearchParams({ base_url: baseUrl || 'http://localhost:11434' });
+        return this.request('GET', `/api/ai-settings/models?${qs}`);
+    },
 };
 
 // === Utilities ===
@@ -132,6 +168,7 @@ function getRoute() {
         return { view: 'detail', id: parseInt(id, 10) };
     }
     if (hash === '#/stats') return { view: 'stats' };
+    if (hash === '#/settings') return { view: 'settings' };
     return { view: 'feed' };
 }
 
@@ -145,7 +182,8 @@ function updateActiveNav() {
         const r = link.dataset.route;
         link.classList.toggle('active',
             (r === 'feed' && route.view === 'feed') ||
-            (r === 'stats' && route.view === 'stats')
+            (r === 'stats' && route.view === 'stats') ||
+            (r === 'settings' && route.view === 'settings')
         );
     });
 }
@@ -159,6 +197,8 @@ async function handleRoute() {
         await renderJobDetail(app, route.id);
     } else if (route.view === 'stats') {
         await renderStats(app);
+    } else if (route.view === 'settings') {
+        await renderSettings(app);
     } else {
         await renderFeed(app);
     }
@@ -172,13 +212,27 @@ async function renderFeed(container) {
             <input type="text" class="search-input" id="filter-search" placeholder="Search jobs...">
             <select class="filter-select" id="filter-score">
                 <option value="">All scores</option>
-                <option value="60">60+</option>
+                <option value="40">40+</option>
+                <option value="60" selected>60+</option>
                 <option value="80">80+</option>
             </select>
             <select class="filter-select" id="filter-sort">
                 <option value="score">Sort by score</option>
                 <option value="date">Sort by date</option>
             </select>
+            <select class="filter-select" id="filter-work-type">
+                <option value="">All work types</option>
+                <option value="remote">Remote</option>
+                <option value="onsite">On-site</option>
+                <option value="hybrid">Hybrid</option>
+            </select>
+            <select class="filter-select" id="filter-employment">
+                <option value="">All employment</option>
+                <option value="fulltime">Full-time</option>
+                <option value="contract">Contract</option>
+                <option value="parttime">Part-time</option>
+            </select>
+            <input type="text" class="search-input" id="filter-location" placeholder="Location..." style="max-width:160px">
         </div>
         <div class="job-list" id="job-list"></div>
         <div id="load-more-container" style="padding:24px 0;text-align:center;display:none">
@@ -189,6 +243,9 @@ async function renderFeed(container) {
     const searchInput = document.getElementById('filter-search');
     const scoreSelect = document.getElementById('filter-score');
     const sortSelect = document.getElementById('filter-sort');
+    const workTypeSelect = document.getElementById('filter-work-type');
+    const employmentSelect = document.getElementById('filter-employment');
+    const locationInput = document.getElementById('filter-location');
     const loadMoreBtn = document.getElementById('load-more-btn');
 
     let debounceTimer;
@@ -201,8 +258,14 @@ async function renderFeed(container) {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(reload, 300);
     });
+    locationInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(reload, 300);
+    });
     scoreSelect.addEventListener('change', reload);
     sortSelect.addEventListener('change', reload);
+    workTypeSelect.addEventListener('change', reload);
+    employmentSelect.addEventListener('change', reload);
     loadMoreBtn.addEventListener('click', () => loadJobs(true));
 
     await loadJobs(false);
@@ -226,6 +289,9 @@ async function loadJobs(append) {
         search: document.getElementById('filter-search')?.value || '',
         min_score: document.getElementById('filter-score')?.value || '',
         sort: document.getElementById('filter-sort')?.value || 'score',
+        work_type: document.getElementById('filter-work-type')?.value || '',
+        employment_type: document.getElementById('filter-employment')?.value || '',
+        location: document.getElementById('filter-location')?.value || '',
     };
 
     try {
@@ -603,6 +669,307 @@ async function handleScrape() {
             btn.textContent = 'Scrape Now';
         }
     }
+}
+
+// === Settings View ===
+async function renderSettings(container) {
+    container.innerHTML = `<div class="loading-container"><div class="spinner spinner-lg"></div><span>Loading settings...</span></div>`;
+
+    try {
+        const [config, aiSettings] = await Promise.all([
+            api.getSearchConfig(),
+            api.getAISettings(),
+        ]);
+        renderSettingsContent(container, config, aiSettings);
+    } catch (err) {
+        showToast(err.message, 'error');
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load settings</div></div>`;
+    }
+}
+
+function renderSettingsContent(container, config, aiSettings = {}) {
+    const termsValue = (config.search_terms || []).join('\n');
+    const hasResume = config.resume_text && config.resume_text.length > 0;
+    const jobTitles = config.job_titles || [];
+    const keySkills = config.key_skills || [];
+    const seniority = config.seniority || '';
+    const summary = config.summary || '';
+    const atsScore = config.ats_score || 0;
+    const atsIssues = config.ats_issues || [];
+    const atsTips = config.ats_tips || [];
+    const hasAts = atsScore > 0;
+    const hasAnalysis = jobTitles.length > 0 || summary;
+
+    const aiProvider = aiSettings.provider || '';
+    const aiKey = aiSettings.api_key || '';
+    const aiModel = aiSettings.model || '';
+    const aiBaseUrl = aiSettings.base_url || '';
+    const hasKey = aiSettings.has_key || false;
+
+    container.innerHTML = `
+        <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:24px">Settings</h1>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">AI Provider</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                Configure which AI backend to use for job scoring, resume analysis, and application tailoring.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Provider</label>
+                    <select class="filter-select" id="ai-provider" style="width:100%">
+                        <option value="anthropic" ${aiProvider === 'anthropic' ? 'selected' : ''}>Anthropic (Claude)</option>
+                        <option value="ollama" ${aiProvider === 'ollama' ? 'selected' : ''}>Ollama (Local)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Model</label>
+                    <div id="ai-model-container">
+                        <input type="text" class="search-input" id="ai-model" placeholder="e.g. claude-sonnet-4-20250514" value="${escapeHtml(aiModel)}" style="width:100%;${aiProvider === 'ollama' ? 'display:none' : ''}">
+                        <div id="ai-model-ollama" style="${aiProvider === 'ollama' ? '' : 'display:none'}">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <select class="filter-select" id="ai-model-select" style="flex:1">
+                                    ${aiModel ? `<option value="${escapeHtml(aiModel)}" selected>${escapeHtml(aiModel)}</option>` : '<option value="">Select a model...</option>'}
+                                </select>
+                                <button class="btn btn-secondary btn-sm" id="refresh-models-btn" title="Refresh models" style="white-space:nowrap">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="ai-key-row" style="margin-bottom:12px;${aiProvider === 'ollama' ? 'display:none' : ''}">
+                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">API Key</label>
+                <input type="password" class="search-input" id="ai-api-key" placeholder="${hasKey ? 'Key configured (leave blank to keep)' : 'Enter API key'}" value="${escapeHtml(aiKey)}" style="width:100%">
+            </div>
+            <div id="ai-url-row" style="margin-bottom:16px;${aiProvider === 'ollama' ? '' : 'display:none'}">
+                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Ollama URL</label>
+                <input type="text" class="search-input" id="ai-base-url" placeholder="http://localhost:11434" value="${escapeHtml(aiBaseUrl)}" style="width:100%">
+            </div>
+            <div style="display:flex;gap:12px">
+                <button class="btn btn-primary" id="save-ai-btn">Save AI Settings</button>
+                <button class="btn btn-secondary" id="test-ai-btn">Test Connection</button>
+            </div>
+            <div id="ai-test-result" style="margin-top:12px"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Resume</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                Upload your resume to automatically derive search terms. Supported: .pdf, .txt, .md files.
+            </p>
+            ${hasResume ? `<div class="status-badge status-prepared" style="margin-bottom:12px">Resume uploaded (${config.resume_text.length} chars)</div>` : ''}
+            <div style="display:flex;gap:12px;align-items:center">
+                <input type="file" id="resume-file" accept=".pdf,.txt,.md,.text" style="font-size:0.875rem">
+                <button class="btn btn-primary" id="upload-resume-btn">Upload & Analyze</button>
+            </div>
+        </div>
+
+        ${hasAts ? `
+        <div class="card" style="padding:24px;margin-bottom:24px;${atsScore < 60 ? 'border-left:4px solid var(--danger)' : atsScore < 80 ? 'border-left:4px solid var(--warning, #f59e0b)' : 'border-left:4px solid var(--success, #22c55e)'}">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">ATS Compatibility</h2>
+                <span class="score-badge ${atsScore >= 80 ? 'score-badge-green' : atsScore >= 60 ? 'score-badge-amber' : 'score-badge-gray'}" style="font-size:1.25rem;padding:8px 16px">${atsScore}/100</span>
+            </div>
+            ${atsScore < 60 ? `<div style="background:var(--danger-bg, rgba(239,68,68,0.1));color:var(--danger, #ef4444);padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:0.875rem">Your resume has significant ATS compatibility issues. Many applicant tracking systems may not parse it correctly.</div>` : ''}
+            ${atsScore >= 60 && atsScore < 80 ? `<div style="background:rgba(245,158,11,0.1);color:#d97706;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:0.875rem">Your resume is moderately ATS-friendly but has room for improvement.</div>` : ''}
+            ${atsIssues.length ? `
+            <div style="margin-bottom:12px">
+                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Issues Found</span>
+                <ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+                    ${atsIssues.map(i => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(i)}</li>`).join('')}
+                </ul>
+            </div>
+            ` : ''}
+            ${atsTips.length ? `
+            <div>
+                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Suggestions</span>
+                <ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">
+                    ${atsTips.map(t => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(t)}</li>`).join('')}
+                </ul>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        ${hasAnalysis ? `
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Resume Analysis</h2>
+            ${summary ? `<p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.9375rem;line-height:1.6">${escapeHtml(summary)}</p>` : ''}
+            ${seniority ? `<div style="margin-bottom:16px"><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Seniority Level</span><div style="margin-top:4px;font-weight:600">${escapeHtml(seniority)}</div></div>` : ''}
+            ${keySkills.length ? `
+            <div style="margin-bottom:16px">
+                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Key Skills</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                    ${keySkills.map(s => `<span style="background:var(--bg-tertiary);color:var(--text-primary);padding:4px 10px;border-radius:6px;font-size:0.8125rem">${escapeHtml(s)}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+            ${jobTitles.length ? `
+            <div>
+                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Best-Fit Job Titles</span>
+                <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+                    ${jobTitles.map(jt => {
+                        const title = typeof jt === 'string' ? jt : jt.title;
+                        const why = typeof jt === 'object' && jt.why ? jt.why : '';
+                        return `<div style="padding:10px 14px;border-radius:8px;background:var(--bg-tertiary)">
+                            <div style="font-weight:600;font-size:0.9375rem">${escapeHtml(title)}</div>
+                            ${why ? `<div style="color:var(--text-secondary);font-size:0.8125rem;margin-top:2px">${escapeHtml(why)}</div>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Search Terms</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                These terms are used by scrapers to find relevant jobs. One per line. Edit freely — they are saved independently of the resume.
+            </p>
+            <textarea class="textarea-styled" id="search-terms-textarea" rows="12" placeholder="e.g. senior devops engineer remote&#10;SRE remote&#10;platform engineer remote">${escapeHtml(termsValue)}</textarea>
+            <div style="display:flex;gap:12px;margin-top:12px">
+                <button class="btn btn-primary" id="save-terms-btn">Save Search Terms</button>
+            </div>
+        </div>
+
+        ${config.updated_at ? `<p style="color:var(--text-tertiary);font-size:0.8125rem">Last updated: ${formatDate(config.updated_at)}</p>` : ''}
+    `;
+
+    document.getElementById('upload-resume-btn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('resume-file');
+        if (!fileInput.files.length) {
+            showToast('Select a resume file first', 'error');
+            return;
+        }
+        const btn = document.getElementById('upload-resume-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+        try {
+            const result = await api.uploadResume(fileInput.files[0]);
+            showToast(`Resume analyzed! ${result.search_terms.length} search terms extracted.`, 'success');
+            const [updatedConfig, updatedAI] = await Promise.all([
+                api.getSearchConfig(),
+                api.getAISettings(),
+            ]);
+            renderSettingsContent(container, updatedConfig, updatedAI);
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Upload & Analyze';
+        }
+    });
+
+    document.getElementById('save-terms-btn').addEventListener('click', async () => {
+        const text = document.getElementById('search-terms-textarea').value;
+        const terms = text.split('\n').map(t => t.trim()).filter(t => t.length > 0);
+        try {
+            await api.updateSearchTerms(terms);
+            showToast(`Saved ${terms.length} search terms`, 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    // AI provider toggle
+    document.getElementById('ai-provider').addEventListener('change', (e) => {
+        const isOllama = e.target.value === 'ollama';
+        document.getElementById('ai-key-row').style.display = isOllama ? 'none' : '';
+        document.getElementById('ai-url-row').style.display = isOllama ? '' : 'none';
+        document.getElementById('ai-model').style.display = isOllama ? 'none' : '';
+        document.getElementById('ai-model-ollama').style.display = isOllama ? '' : 'none';
+        if (isOllama) fetchOllamaModels();
+    });
+
+    // Fetch and populate Ollama models dropdown
+    async function fetchOllamaModels() {
+        const select = document.getElementById('ai-model-select');
+        const currentVal = select.value;
+        const btn = document.getElementById('refresh-models-btn');
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+            const baseUrl = document.getElementById('ai-base-url').value || 'http://localhost:11434';
+            const result = await api.getOllamaModels(baseUrl);
+            if (result.ok && result.models.length > 0) {
+                select.innerHTML = result.models.map(m =>
+                    `<option value="${escapeHtml(m)}" ${m === currentVal ? 'selected' : ''}>${escapeHtml(m)}</option>`
+                ).join('');
+                if (!currentVal && result.models.length > 0) {
+                    select.value = result.models[0];
+                }
+            } else if (!result.ok) {
+                select.innerHTML = `<option value="">Failed to connect</option>`;
+                showToast(`Could not reach Ollama: ${result.error}`, 'error');
+            } else {
+                select.innerHTML = `<option value="">No models found</option>`;
+            }
+        } catch (err) {
+            select.innerHTML = `<option value="">Error loading models</option>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Refresh';
+        }
+    }
+
+    document.getElementById('refresh-models-btn').addEventListener('click', fetchOllamaModels);
+
+    // Auto-fetch models if Ollama is already selected
+    if (document.getElementById('ai-provider').value === 'ollama') {
+        fetchOllamaModels();
+    }
+
+    function getAIFormValues() {
+        const provider = document.getElementById('ai-provider').value;
+        const model = provider === 'ollama'
+            ? document.getElementById('ai-model-select').value
+            : document.getElementById('ai-model').value;
+        return {
+            provider,
+            api_key: document.getElementById('ai-api-key').value,
+            model,
+            base_url: document.getElementById('ai-base-url').value,
+        };
+    }
+
+    // Save AI settings
+    document.getElementById('save-ai-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('save-ai-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Saving...';
+        try {
+            await api.updateAISettings(getAIFormValues());
+            showToast('AI settings saved', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Save AI Settings';
+        }
+    });
+
+    // Test AI connection
+    document.getElementById('test-ai-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('test-ai-btn');
+        const resultDiv = document.getElementById('ai-test-result');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Testing...';
+        resultDiv.innerHTML = '';
+        try {
+            const result = await api.testAIConnection(getAIFormValues());
+            if (result.ok) {
+                resultDiv.innerHTML = `<div style="color:var(--success, #22c55e);font-size:0.875rem;font-weight:600">Connection successful! Response: "${escapeHtml(result.response)}"</div>`;
+            } else {
+                resultDiv.innerHTML = `<div style="color:var(--danger, #ef4444);font-size:0.875rem;font-weight:600">Connection failed: ${escapeHtml(result.error)}</div>`;
+            }
+        } catch (err) {
+            resultDiv.innerHTML = `<div style="color:var(--danger, #ef4444);font-size:0.875rem">${escapeHtml(err.message)}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Test Connection';
+        }
+    });
 }
 
 // === Theme Toggle ===

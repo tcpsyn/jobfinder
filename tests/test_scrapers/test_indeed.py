@@ -2,7 +2,7 @@ import re
 
 import pytest
 from app.scrapers.base import JobListing
-from app.scrapers.indeed import IndeedScraper, SEARCH_KEYWORDS
+from app.scrapers.indeed import IndeedScraper, DEFAULT_KEYWORDS
 
 MOCK_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -28,7 +28,7 @@ MOCK_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 
 @pytest.mark.asyncio
 async def test_indeed_parse(httpx_mock):
-    for kw in SEARCH_KEYWORDS:
+    for kw in DEFAULT_KEYWORDS:
         httpx_mock.add_response(url=re.compile(r"https://www\.indeed\.com/rss\?.*"), text=MOCK_RSS)
     scraper = IndeedScraper()
     jobs = await scraper.scrape()
@@ -42,7 +42,7 @@ async def test_indeed_parse(httpx_mock):
 @pytest.mark.asyncio
 async def test_indeed_handles_empty(httpx_mock):
     empty_rss = '<?xml version="1.0"?><rss version="2.0"><channel></channel></rss>'
-    for kw in SEARCH_KEYWORDS:
+    for kw in DEFAULT_KEYWORDS:
         httpx_mock.add_response(url=re.compile(r"https://www\.indeed\.com/rss\?.*"), text=empty_rss)
     scraper = IndeedScraper()
     jobs = await scraper.scrape()
@@ -51,7 +51,7 @@ async def test_indeed_handles_empty(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_indeed_handles_error(httpx_mock):
-    for kw in SEARCH_KEYWORDS:
+    for kw in DEFAULT_KEYWORDS:
         httpx_mock.add_response(url=re.compile(r"https://www\.indeed\.com/rss\?.*"), status_code=500)
     scraper = IndeedScraper()
     jobs = await scraper.scrape()

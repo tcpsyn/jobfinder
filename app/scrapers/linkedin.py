@@ -10,15 +10,21 @@ from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
 
-SEARCH_QUERY = 'site:linkedin.com/jobs "senior devops" OR "SRE" OR "infrastructure engineer" remote'
+DEFAULT_QUERY = 'site:linkedin.com/jobs "senior devops" OR "SRE" OR "infrastructure engineer" remote'
 
 
 class LinkedInScraper(BaseScraper):
     source_name = "linkedin"
 
+    def _build_query(self) -> str:
+        if not self.search_terms:
+            return DEFAULT_QUERY
+        quoted = [f'"{t}"' for t in self.search_terms[:5]]
+        return f'site:linkedin.com/jobs {" OR ".join(quoted)} remote'
+
     async def scrape(self) -> list[JobListing]:
         is_test = os.environ.get("TESTING", "")
-        encoded = quote_plus(SEARCH_QUERY)
+        encoded = quote_plus(self._build_query())
         url = f"https://www.google.com/search?q={encoded}&num=20"
 
         try:

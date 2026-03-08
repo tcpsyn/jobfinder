@@ -1,6 +1,7 @@
-import json
 import asyncio
 import logging
+
+from app.ai_client import AIClient, parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -21,48 +22,33 @@ Return ONLY valid JSON with this exact structure:
 }}
 
 Scoring criteria:
-- Skills overlap (Linux, AWS, K8s, Python, Terraform, Ansible, Docker, CI/CD)
-- Seniority alignment (candidate has 20+ years, look for senior/staff/lead roles)
-- Salary fit (minimum $150k FTE or $95/hr contract)
-- Remote compatibility
-- AI/LLM relevance is a bonus differentiator
+- Skills overlap between resume and job requirements
+- Seniority alignment (years of experience vs role level)
+- Role relevance (how well the candidate's background fits)
+- Remote compatibility if applicable
 - Score 80+ = strong match, 60-79 = decent, below 60 = weak"""
 
 
 class JobMatcher:
-    def __init__(self, client, resume_text: str):
+    def __init__(self, client: AIClient, resume_text: str):
         self.client = client
         self.resume_text = resume_text
 
     async def score_job(self, job_description: str) -> dict:
         try:
-            message = await self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
-                messages=[{
-                    "role": "user",
-                    "content": SCORING_PROMPT.format(
-                        resume=self.resume_text,
-                        job_description=job_description
-                    )
-                }]
+            prompt = SCORING_PROMPT.format(
+                resume=self.resume_text,
+                job_description=job_description,
             )
-            return json.loads(message.content[0].text)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error in scoring: {e}")
-            return {
-                "score": 0,
-                "reasons": [],
-                "concerns": [f"Parse error: {e}"],
-                "keywords": []
-            }
+            raw = await self.client.chat(prompt, max_tokens=1024)
+            return parse_json_response(raw)
         except Exception as e:
             logger.error(f"Scoring failed: {e}")
             return {
                 "score": 0,
                 "reasons": [],
-                "concerns": [f"API error: {e}"],
-                "keywords": []
+                "concerns": [f"Scoring error: {e}"],
+                "keywords": [],
             }
 
     async def batch_score(self, jobs: list[dict], delay: float = 2.0) -> list[dict]:

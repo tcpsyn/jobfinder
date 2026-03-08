@@ -70,11 +70,51 @@ class Database:
                 notes TEXT,
                 FOREIGN KEY (job_id) REFERENCES jobs(id)
             );
+            CREATE TABLE IF NOT EXISTS search_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                resume_text TEXT NOT NULL DEFAULT '',
+                search_terms TEXT NOT NULL DEFAULT '[]',
+                job_titles TEXT NOT NULL DEFAULT '[]',
+                key_skills TEXT NOT NULL DEFAULT '[]',
+                seniority TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                ats_score INTEGER NOT NULL DEFAULT 0,
+                ats_issues TEXT NOT NULL DEFAULT '[]',
+                ats_tips TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS ai_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                provider TEXT NOT NULL DEFAULT 'anthropic',
+                api_key TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                base_url TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs(dedup_hash);
             CREATE INDEX IF NOT EXISTS idx_scores_job ON job_scores(job_id);
             CREATE INDEX IF NOT EXISTS idx_sources_job ON sources(job_id);
         """)
+        await self._migrate()
         await self.db.commit()
+
+    async def _migrate(self):
+        cursor = await self.db.execute("PRAGMA table_info(search_config)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if not columns:
+            return
+        migrations = {
+            "job_titles": "ALTER TABLE search_config ADD COLUMN job_titles TEXT NOT NULL DEFAULT '[]'",
+            "key_skills": "ALTER TABLE search_config ADD COLUMN key_skills TEXT NOT NULL DEFAULT '[]'",
+            "seniority": "ALTER TABLE search_config ADD COLUMN seniority TEXT NOT NULL DEFAULT ''",
+            "summary": "ALTER TABLE search_config ADD COLUMN summary TEXT NOT NULL DEFAULT ''",
+            "ats_score": "ALTER TABLE search_config ADD COLUMN ats_score INTEGER NOT NULL DEFAULT 0",
+            "ats_issues": "ALTER TABLE search_config ADD COLUMN ats_issues TEXT NOT NULL DEFAULT '[]'",
+            "ats_tips": "ALTER TABLE search_config ADD COLUMN ats_tips TEXT NOT NULL DEFAULT '[]'",
+        }
+        for col, sql in migrations.items():
+            if col not in columns:
+                await self.db.execute(sql)
 
     async def insert_job(self, title, company, location, salary_min, salary_max,
                          description, url, posted_date, application_method, contact_email):
@@ -155,7 +195,8 @@ class Database:
         return dict(row) if row else None
 
     async def list_jobs(self, sort_by="score", limit=50, offset=0, min_score=None,
-                        search=None, source=None, dismissed=False):
+                        search=None, source=None, dismissed=False,
+                        work_type=None, employment_type=None, location=None):
         query = """
             SELECT j.*, js.match_score, js.match_reasons, js.concerns, a.status as app_status
             FROM jobs j
@@ -173,6 +214,21 @@ class Database:
         if source:
             query += " AND j.id IN (SELECT job_id FROM sources WHERE source_name = ?)"
             params.append(source)
+        if work_type == "remote":
+            query += " AND (LOWER(j.location) LIKE '%remote%' OR LOWER(j.title) LIKE '%remote%')"
+        elif work_type == "onsite":
+            query += " AND LOWER(j.location) NOT LIKE '%remote%' AND LOWER(j.title) NOT LIKE '%remote%' AND LOWER(j.location) NOT LIKE '%hybrid%'"
+        elif work_type == "hybrid":
+            query += " AND (LOWER(j.location) LIKE '%hybrid%' OR LOWER(j.title) LIKE '%hybrid%')"
+        if employment_type == "fulltime":
+            query += " AND (LOWER(j.title) LIKE '%full%time%' OR LOWER(j.description) LIKE '%full%time%' OR (LOWER(j.title) NOT LIKE '%contract%' AND LOWER(j.title) NOT LIKE '%part%time%'))"
+        elif employment_type == "contract":
+            query += " AND (LOWER(j.title) LIKE '%contract%' OR LOWER(j.description) LIKE '%contract%' OR LOWER(j.title) LIKE '%freelance%')"
+        elif employment_type == "parttime":
+            query += " AND (LOWER(j.title) LIKE '%part%time%' OR LOWER(j.description) LIKE '%part%time%')"
+        if location:
+            query += " AND LOWER(j.location) LIKE ?"
+            params.append(f"%{location.lower()}%")
         if sort_by == "score":
             query += " ORDER BY js.match_score DESC NULLS LAST"
         else:
@@ -202,6 +258,77 @@ class Database:
 
     async def dismiss_job(self, job_id):
         await self.db.execute("UPDATE jobs SET dismissed = 1 WHERE id = ?", (job_id,))
+        await self.db.commit()
+
+    async def get_search_config(self):
+        cursor = await self.db.execute("SELECT * FROM search_config WHERE id = 1")
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["search_terms"] = json.loads(d["search_terms"])
+        d["job_titles"] = json.loads(d["job_titles"])
+        d["key_skills"] = json.loads(d["key_skills"])
+        d["ats_issues"] = json.loads(d["ats_issues"])
+        d["ats_tips"] = json.loads(d["ats_tips"])
+        return d
+
+    async def save_search_config(self, resume_text: str, search_terms: list[str],
+                                  job_titles: list = None, key_skills: list = None,
+                                  seniority: str = "", summary: str = "",
+                                  ats_score: int = 0, ats_issues: list = None,
+                                  ats_tips: list = None):
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            """INSERT INTO search_config (id, resume_text, search_terms, job_titles,
+               key_skills, seniority, summary, ats_score, ats_issues, ats_tips, updated_at)
+               VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+               resume_text = excluded.resume_text,
+               search_terms = excluded.search_terms,
+               job_titles = excluded.job_titles,
+               key_skills = excluded.key_skills,
+               seniority = excluded.seniority,
+               summary = excluded.summary,
+               ats_score = excluded.ats_score,
+               ats_issues = excluded.ats_issues,
+               ats_tips = excluded.ats_tips,
+               updated_at = excluded.updated_at""",
+            (resume_text, json.dumps(search_terms), json.dumps(job_titles or []),
+             json.dumps(key_skills or []), seniority, summary,
+             ats_score, json.dumps(ats_issues or []), json.dumps(ats_tips or []), now)
+        )
+        await self.db.commit()
+
+    async def update_search_terms(self, search_terms: list[str]):
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            "UPDATE search_config SET search_terms = ?, updated_at = ? WHERE id = 1",
+            (json.dumps(search_terms), now)
+        )
+        await self.db.commit()
+
+    async def get_ai_settings(self):
+        cursor = await self.db.execute("SELECT * FROM ai_settings WHERE id = 1")
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return dict(row)
+
+    async def save_ai_settings(self, provider: str, api_key: str = "",
+                                model: str = "", base_url: str = ""):
+        now = datetime.now(timezone.utc).isoformat()
+        await self.db.execute(
+            """INSERT INTO ai_settings (id, provider, api_key, model, base_url, updated_at)
+               VALUES (1, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+               provider = excluded.provider,
+               api_key = excluded.api_key,
+               model = excluded.model,
+               base_url = excluded.base_url,
+               updated_at = excluded.updated_at""",
+            (provider, api_key, model, base_url, now)
+        )
         await self.db.commit()
 
     async def get_stats(self):

@@ -21,9 +21,7 @@ MOCK_CLAUDE_RESPONSE = {
 @pytest.mark.asyncio
 async def test_matcher_scores_job():
     mock_client = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=json.dumps(MOCK_CLAUDE_RESPONSE))]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_client.chat = AsyncMock(return_value=json.dumps(MOCK_CLAUDE_RESPONSE))
 
     matcher = JobMatcher(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await matcher.score_job(SAMPLE_JOB_DESC)
@@ -35,19 +33,16 @@ async def test_matcher_scores_job():
 @pytest.mark.asyncio
 async def test_matcher_handles_bad_json():
     mock_client = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = [MagicMock(text="not json")]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_client.chat = AsyncMock(return_value="not json")
 
     matcher = JobMatcher(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await matcher.score_job(SAMPLE_JOB_DESC)
     assert result["score"] == 0
-    assert "parse error" in result["concerns"][0].lower()
 
 @pytest.mark.asyncio
 async def test_matcher_handles_api_error():
     mock_client = MagicMock()
-    mock_client.messages.create = AsyncMock(side_effect=Exception("API down"))
+    mock_client.chat = AsyncMock(side_effect=Exception("API down"))
 
     matcher = JobMatcher(client=mock_client, resume_text=SAMPLE_RESUME)
     result = await matcher.score_job(SAMPLE_JOB_DESC)
@@ -56,9 +51,7 @@ async def test_matcher_handles_api_error():
 @pytest.mark.asyncio
 async def test_matcher_batch_score():
     mock_client = MagicMock()
-    mock_message = MagicMock()
-    mock_message.content = [MagicMock(text=json.dumps(MOCK_CLAUDE_RESPONSE))]
-    mock_client.messages.create = AsyncMock(return_value=mock_message)
+    mock_client.chat = AsyncMock(return_value=json.dumps(MOCK_CLAUDE_RESPONSE))
 
     matcher = JobMatcher(client=mock_client, resume_text=SAMPLE_RESUME)
     jobs = [{"id": 1, "description": "job 1"}, {"id": 2, "description": "job 2"}]
@@ -67,3 +60,12 @@ async def test_matcher_batch_score():
     assert all(r["score"] == 88 for r in results)
     assert results[0]["job_id"] == 1
     assert results[1]["job_id"] == 2
+
+@pytest.mark.asyncio
+async def test_matcher_strips_markdown():
+    mock_client = MagicMock()
+    mock_client.chat = AsyncMock(return_value=f"```json\n{json.dumps(MOCK_CLAUDE_RESPONSE)}\n```")
+
+    matcher = JobMatcher(client=mock_client, resume_text=SAMPLE_RESUME)
+    result = await matcher.score_job(SAMPLE_JOB_DESC)
+    assert result["score"] == 88

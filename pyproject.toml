@@ -13,6 +13,7 @@ dependencies = [
     "apscheduler>=3.10.0",
     "python-multipart>=0.0.18",
     "pydantic-settings>=2.7.0",
+    "pymupdf>=1.24.0",
 ]
 
 [project.optional-dependencies]

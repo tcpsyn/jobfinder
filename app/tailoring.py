@@ -1,5 +1,6 @@
-import json
 import logging
+
+from app.ai_client import AIClient, parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ Return ONLY valid JSON:
 
 
 class Tailor:
-    def __init__(self, client, resume_text: str):
+    def __init__(self, client: AIClient, resume_text: str):
         self.client = client
         self.resume_text = resume_text
 
@@ -36,22 +37,14 @@ class Tailor:
         suggested_keywords: list,
     ) -> dict:
         try:
-            message = await self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": TAILORING_PROMPT.format(
-                            resume=self.resume_text,
-                            job_description=job_description,
-                            match_reasons="\n".join(match_reasons),
-                            keywords=", ".join(suggested_keywords),
-                        ),
-                    }
-                ],
+            prompt = TAILORING_PROMPT.format(
+                resume=self.resume_text,
+                job_description=job_description,
+                match_reasons="\n".join(match_reasons),
+                keywords=", ".join(suggested_keywords),
             )
-            return json.loads(message.content[0].text)
+            raw = await self.client.chat(prompt, max_tokens=4096)
+            return parse_json_response(raw)
         except Exception as e:
             logger.error(f"Tailoring failed: {e}")
             return {

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
     usajobs_api_key: str = ""
     db_path: str = "data/jobfinder.db"
     scrape_interval_hours: int = 6

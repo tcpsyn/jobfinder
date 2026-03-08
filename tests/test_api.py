@@ -183,3 +183,57 @@ async def test_email_no_contact(client, app):
 
     resp = await client.post(f"/api/jobs/{job_id}/email")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_search_config_empty(client):
+    resp = await client.get("/api/search-config")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["search_terms"] == []
+    assert data["resume_text"] == ""
+
+
+@pytest.mark.asyncio
+async def test_update_search_terms(client, app):
+    db = app.state.db
+    await db.save_search_config("resume", ["old"])
+    resp = await client.post("/api/search-config/terms", json={"search_terms": ["devops remote", "SRE"]})
+    assert resp.status_code == 200
+    assert resp.json()["search_terms"] == ["devops remote", "SRE"]
+
+    config = await db.get_search_config()
+    assert config["search_terms"] == ["devops remote", "SRE"]
+
+
+@pytest.mark.asyncio
+async def test_upload_resume_no_client(client, app):
+    app.state._anthropic_client = None
+    app.state.testing = True
+    import io
+    files = {"file": ("resume.txt", io.BytesIO(b"My resume content"), "text/plain")}
+    resp = await client.post("/api/resume/upload", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["resume_length"] == len("My resume content")
+    assert data["search_terms"] == []
+
+
+@pytest.mark.asyncio
+async def test_upload_resume_pdf(client, app):
+    app.state._anthropic_client = None
+    app.state.testing = True
+    import fitz
+    import io
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Senior DevOps Engineer Resume")
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    files = {"file": ("resume.pdf", io.BytesIO(pdf_bytes), "application/pdf")}
+    resp = await client.post("/api/resume/upload", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["resume_length"] > 0

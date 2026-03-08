@@ -23,6 +23,9 @@ class JobListing:
 class BaseScraper:
     source_name: str = "base"
 
+    def __init__(self, search_terms: list[str] | None = None):
+        self.search_terms = search_terms or []
+
     def get_client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             headers={
