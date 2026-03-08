@@ -468,7 +468,7 @@ function renderJobDetailContent(container, job) {
                     </div>
                 </div>
                 <div id="prepared-container">
-                    ${application?.tailored_resume ? renderPreparedSection(application) : ''}
+                    ${application?.tailored_resume ? renderPreparedSection(application, job.id) : ''}
                 </div>
                 <div id="email-container">
                     ${application?.email_draft ? renderEmailPreview(JSON.parse(application.email_draft)) : ''}
@@ -489,7 +489,7 @@ function renderJobDetailContent(container, job) {
         btn.innerHTML = '<span class="spinner"></span> Preparing...';
         try {
             const result = await api.prepareApplication(job.id);
-            document.getElementById('prepared-container').innerHTML = renderPreparedSection(result);
+            document.getElementById('prepared-container').innerHTML = renderPreparedSection(result, job.id);
             attachPreparedListeners();
             showToast('Application prepared!', 'success');
         } catch (err) {
@@ -532,10 +532,16 @@ function renderJobDetailContent(container, job) {
     attachPreparedListeners();
 }
 
-function renderPreparedSection(data) {
+function renderPreparedSection(data, jobId) {
     return `
         <div class="card sidebar-section">
             <h3>Tailored Resume</h3>
+            <div class="pdf-download-card">
+                <a href="/api/jobs/${jobId}/resume.pdf" download class="pdf-file-link" draggable="true">
+                    <span class="pdf-icon">PDF</span>
+                    <span class="pdf-label">Resume</span>
+                </a>
+            </div>
             <div class="prepared-section">
                 <textarea class="textarea-styled" id="resume-textarea">${escapeHtml(data.tailored_resume || '')}</textarea>
                 <div class="prepared-actions">
@@ -545,6 +551,12 @@ function renderPreparedSection(data) {
         </div>
         <div class="card sidebar-section">
             <h3>Cover Letter</h3>
+            <div class="pdf-download-card">
+                <a href="/api/jobs/${jobId}/cover-letter.pdf" download class="pdf-file-link" draggable="true">
+                    <span class="pdf-icon">PDF</span>
+                    <span class="pdf-label">Cover Letter</span>
+                </a>
+            </div>
             <div class="prepared-section">
                 <textarea class="textarea-styled" id="cover-textarea">${escapeHtml(data.cover_letter || '')}</textarea>
                 <div class="prepared-actions">

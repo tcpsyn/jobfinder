@@ -5,7 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Database
@@ -220,6 +220,44 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             "tailored_resume": result.get("tailored_resume", ""),
             "cover_letter": result.get("cover_letter", ""),
         }
+
+    @app.get("/api/jobs/{job_id}/resume.pdf")
+    async def download_resume_pdf(job_id: int):
+        from app.pdf_generator import generate_resume_pdf
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        application = await app.state.db.get_application(job_id)
+        if not application or not application.get("tailored_resume"):
+            raise HTTPException(404, "No tailored resume prepared for this job")
+        pdf_bytes = generate_resume_pdf(application["tailored_resume"])
+        filename = f"Resume - {job['company']} - {job['title']}.pdf".replace("/", "-")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/jobs/{job_id}/cover-letter.pdf")
+    async def download_cover_letter_pdf(job_id: int):
+        from app.pdf_generator import generate_cover_letter_pdf
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        application = await app.state.db.get_application(job_id)
+        if not application or not application.get("cover_letter"):
+            raise HTTPException(404, "No cover letter prepared for this job")
+        pdf_bytes = generate_cover_letter_pdf(
+            application["cover_letter"],
+            company=job.get("company", ""),
+            position=job.get("title", ""),
+        )
+        filename = f"Cover Letter - {job['company']} - {job['title']}.pdf".replace("/", "-")
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.post("/api/jobs/{job_id}/email")
     async def draft_email(job_id: int):

@@ -106,6 +106,8 @@ SQLite with tables: `jobs`, `sources`, `job_scores`, `applications`, `search_con
 - `GET /api/jobs/:id` — Detail with score, sources, application
 - `POST /api/jobs/:id/dismiss` — Dismiss job
 - `POST /api/jobs/:id/prepare` — Generate tailored resume + cover letter
+- `GET /api/jobs/:id/resume.pdf` — Download tailored resume as PDF
+- `GET /api/jobs/:id/cover-letter.pdf` — Download cover letter as PDF
 - `POST /api/jobs/:id/email` — Draft application email
 - `POST /api/jobs/:id/application` — Update status/notes
 
