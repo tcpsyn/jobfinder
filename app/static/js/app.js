@@ -485,6 +485,15 @@ function renderJobDetailContent(container, job, profile = {}) {
                         </a>
                         ${(job.hiring_manager_email || job.contact_email) ? `<button class="btn btn-secondary" id="email-btn">Draft Email</button>` : ''}
                     </div>
+                    ${application?.status !== 'applied' ? `
+                        <button class="btn" id="mark-applied-btn" style="width:100%;background:#22c55e;color:white;font-weight:600;margin-top:8px">
+                            Mark as Applied
+                        </button>
+                    ` : `
+                        <div style="text-align:center;color:#22c55e;font-weight:600;font-size:0.875rem;margin-top:8px">
+                            Applied ${application.applied_at ? formatDate(application.applied_at) : ''}
+                        </div>
+                    `}
                     <div class="mt-16">
                         <label class="mb-8" style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary)">Status</label>
                         <select class="status-select" id="status-select">
@@ -647,6 +656,22 @@ function renderJobDetailContent(container, job, profile = {}) {
             showToast(err.message, 'error');
         }
     });
+
+    const markAppliedBtn = document.getElementById('mark-applied-btn');
+    if (markAppliedBtn) {
+        markAppliedBtn.addEventListener('click', async () => {
+            markAppliedBtn.disabled = true;
+            try {
+                await api.updateApplication(job.id, 'applied');
+                showToast('Marked as applied!', 'success');
+                const updated = await api.getJob(job.id);
+                renderJobDetailContent(container, updated, profile);
+            } catch (err) {
+                showToast(err.message, 'error');
+                markAppliedBtn.disabled = false;
+            }
+        });
+    }
 
     const addNoteBtn = document.getElementById('add-note-btn');
     const addNoteInput = document.getElementById('add-note-input');

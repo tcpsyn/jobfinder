@@ -8,6 +8,8 @@ from fastapi import FastAPI, HTTPException, Query, Request, UploadFile, File
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from datetime import datetime, timezone
+
 from app.database import Database
 from app.ai_client import AIClient
 
@@ -358,6 +360,11 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             await app.state.db.insert_application(job_id, status)
         else:
             await app.state.db.update_application(app_row["id"], status=status, notes=notes)
+        if status == "applied":
+            now = datetime.now(timezone.utc).isoformat()
+            app_row = await app.state.db.get_application(job_id)
+            if app_row and not app_row.get("applied_at"):
+                await app.state.db.update_application(app_row["id"], applied_at=now)
         await app.state.db.add_event(job_id, "status_change", f"Status changed to {status}")
         return {"ok": True}
 
