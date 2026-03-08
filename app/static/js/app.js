@@ -531,6 +531,23 @@ function renderJobDetailContent(container, job, profile = {}) {
                         ${renderTimeline(job.events || [])}
                     </div>
                 </div>
+                ${(job.similar && job.similar.length > 0) ? `
+                <div class="card sidebar-section">
+                    <h3>Similar Listings (${job.similar.length})</h3>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                        ${job.similar.map(s => `
+                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-surface-secondary);border-radius:var(--radius-sm)">
+                                <div>
+                                    <a href="#/job/${s.id}" style="font-size:0.875rem;font-weight:500;color:var(--accent)">${escapeHtml(s.title)}</a>
+                                    <div style="font-size:0.75rem;color:var(--text-tertiary)">${escapeHtml(s.company)}</div>
+                                </div>
+                                ${s.match_score ? `<span class="score-badge ${getScoreClass(s.match_score)}" style="font-size:0.75rem">${s.match_score}</span>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="dismiss-dupes-btn" style="margin-top:12px;width:100%">Dismiss Duplicates</button>
+                </div>
+                ` : ''}
                 <div id="prepared-container">
                     ${application?.tailored_resume ? renderPreparedSection(application, job.id) : ''}
                 </div>
@@ -618,6 +635,18 @@ function renderJobDetailContent(container, job, profile = {}) {
     }
 
     attachPreparedListeners();
+
+    const dismissDupesBtn = document.getElementById('dismiss-dupes-btn');
+    if (dismissDupesBtn) {
+        dismissDupesBtn.addEventListener('click', async () => {
+            if (!confirm('Dismiss all similar listings? This keeps only the current job.')) return;
+            for (const s of job.similar) {
+                await api.dismissJob(s.id);
+            }
+            showToast(`Dismissed ${job.similar.length} similar listings`, 'success');
+            await renderJobDetail(container, job.id);
+        });
+    }
 }
 
 function renderTimeline(events) {

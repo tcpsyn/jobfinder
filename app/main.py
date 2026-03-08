@@ -177,7 +177,8 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         sources = await app.state.db.get_sources(job_id)
         application = await app.state.db.get_application(job_id)
         events = await app.state.db.get_events(job_id)
-        return {**job, "score": score, "sources": sources, "application": application, "events": events}
+        similar = await app.state.db.find_similar_jobs(job["title"], job["company"], exclude_id=job_id)
+        return {**job, "score": score, "sources": sources, "application": application, "events": events, "similar": similar}
 
     @app.post("/api/jobs/{job_id}/dismiss")
     async def dismiss_job(job_id: int):

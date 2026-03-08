@@ -163,6 +163,21 @@ async def test_update_profile(db):
 
 
 @pytest.mark.asyncio
+async def test_find_similar_jobs(db):
+    id1 = await db.insert_job("Senior Dev", "Acme Corp", "Remote", None, None, "desc", "http://a", None, "url", None)
+    id2 = await db.insert_job("Junior Dev", "Acme Corp", "NYC", None, None, "desc", "http://b", None, "url", None)
+    id3 = await db.insert_job("Designer", "Other Inc", "Remote", None, None, "desc", "http://c", None, "url", None)
+
+    similar = await db.find_similar_jobs("Senior Dev", "Acme Corp", exclude_id=id1)
+    assert len(similar) == 1
+    assert similar[0]["id"] == id2
+
+    # Other company should not match
+    similar2 = await db.find_similar_jobs("Designer", "Other Inc", exclude_id=id3)
+    assert len(similar2) == 0  # no other jobs from "Other Inc"
+
+
+@pytest.mark.asyncio
 async def test_dismiss_job(db):
     job_id = await db.insert_job(
         title="Dismiss me", company="Co", location="Remote",

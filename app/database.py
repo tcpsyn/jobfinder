@@ -402,6 +402,24 @@ class Database:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def find_similar_jobs(self, title: str, company: str, exclude_id: int = None) -> list[dict]:
+        """Find jobs with similar company name (fuzzy match on company, same or similar title)."""
+        norm_company = company.lower().strip()
+        query = """
+            SELECT j.id, j.title, j.company, j.url, js.match_score
+            FROM jobs j
+            LEFT JOIN job_scores js ON j.id = js.job_id
+            WHERE LOWER(j.company) LIKE ? AND j.dismissed = 0
+        """
+        params = [f"%{norm_company}%"]
+        if exclude_id:
+            query += " AND j.id != ?"
+            params.append(exclude_id)
+        query += " LIMIT 10"
+        cursor = await self.db.execute(query, params)
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
     async def clear_jobs(self):
         await self.db.executescript("""
             DELETE FROM sources;
