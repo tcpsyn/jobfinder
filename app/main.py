@@ -370,6 +370,18 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         asyncio.create_task(_run_scoring())
         return {"status": "scoring_triggered"}
 
+    @app.get("/api/profile")
+    async def get_profile():
+        profile = await app.state.db.get_user_profile()
+        return profile or {"full_name": "", "email": "", "phone": "", "location": "",
+                            "linkedin_url": "", "github_url": "", "portfolio_url": ""}
+
+    @app.post("/api/profile")
+    async def update_profile(request: Request):
+        body = await request.json()
+        await app.state.db.save_user_profile(**body)
+        return {"ok": True}
+
     @app.get("/api/search-config")
     async def get_search_config():
         config = await app.state.db.get_search_config()

@@ -386,8 +386,11 @@ async function renderJobDetail(container, jobId) {
     container.innerHTML = `<div class="loading-container"><div class="spinner spinner-lg"></div><span>Loading job details...</span></div>`;
 
     try {
-        const job = await api.getJob(jobId);
-        renderJobDetailContent(container, job);
+        const [job, profile] = await Promise.all([
+            api.getJob(jobId),
+            api.request('GET', '/api/profile'),
+        ]);
+        renderJobDetailContent(container, job, profile);
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `
@@ -399,7 +402,7 @@ async function renderJobDetail(container, jobId) {
     }
 }
 
-function renderJobDetailContent(container, job) {
+function renderJobDetailContent(container, job, profile = {}) {
     const score = job.score;
     const matchScore = score?.match_score;
     const scoreClass = getScoreClass(matchScore);
@@ -467,6 +470,34 @@ function renderJobDetailContent(container, job) {
                         <button class="btn btn-secondary btn-sm" id="save-status-btn">Save Status</button>
                     </div>
                 </div>
+                ${(() => {
+                    const profileFields = [
+                        {label: 'Name', key: 'full_name'},
+                        {label: 'Email', key: 'email'},
+                        {label: 'Phone', key: 'phone'},
+                        {label: 'Location', key: 'location'},
+                        {label: 'LinkedIn', key: 'linkedin_url'},
+                        {label: 'GitHub', key: 'github_url'},
+                        {label: 'Portfolio', key: 'portfolio_url'},
+                    ];
+                    const hasProfile = profile && Object.values(profile).some(v => v && v !== '');
+                    if (!hasProfile) return '';
+                    const items = profileFields
+                        .filter(f => profile[f.key])
+                        .map(f => `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+                            <span style="font-size:0.8125rem;color:var(--text-tertiary)">${f.label}</span>
+                            <span style="display:flex;align-items:center;gap:4px">
+                                <span style="font-size:0.8125rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(profile[f.key])}">${escapeHtml(profile[f.key])}</span>
+                                <button class="btn btn-secondary btn-sm quick-copy-btn" data-value="${escapeHtml(profile[f.key])}" title="Copy" style="padding:2px 6px;min-width:auto;font-size:0.75rem">&#128203;</button>
+                            </span>
+                        </div>`).join('');
+                    return `<div class="card sidebar-section">
+                        <details open>
+                            <summary style="cursor:pointer;font-weight:600;font-size:0.9375rem;margin-bottom:8px">Quick Copy</summary>
+                            ${items}
+                        </details>
+                    </div>`;
+                })()}
                 <div class="card sidebar-section">
                     <h3>Timeline</h3>
                     <div class="flex gap-8 mb-16">
@@ -488,6 +519,12 @@ function renderJobDetailContent(container, job) {
     `;
 
     // Wire up events
+    document.querySelectorAll('.quick-copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            copyToClipboard(btn.dataset.value);
+        });
+    });
+
     document.getElementById('back-btn').addEventListener('click', (e) => {
         e.preventDefault();
         navigate('#/');
@@ -752,18 +789,19 @@ async function renderSettings(container) {
     container.innerHTML = `<div class="loading-container"><div class="spinner spinner-lg"></div><span>Loading settings...</span></div>`;
 
     try {
-        const [config, aiSettings] = await Promise.all([
+        const [config, aiSettings, profile] = await Promise.all([
             api.getSearchConfig(),
             api.getAISettings(),
+            api.request('GET', '/api/profile'),
         ]);
-        renderSettingsContent(container, config, aiSettings);
+        renderSettingsContent(container, config, aiSettings, profile);
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load settings</div></div>`;
     }
 }
 
-function renderSettingsContent(container, config, aiSettings = {}) {
+function renderSettingsContent(container, config, aiSettings = {}, profile = {}) {
     const termsValue = (config.search_terms || []).join('\n');
     const excludeTermsValue = (config.exclude_terms || []).join('\n');
     const hasResume = config.resume_text && config.resume_text.length > 0;
@@ -785,6 +823,65 @@ function renderSettingsContent(container, config, aiSettings = {}) {
 
     container.innerHTML = `
         <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:24px">Settings</h1>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Your Profile</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                Store common application form fields for quick copy-paste during job applications.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Full Name</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="text" class="search-input" id="profile-name" value="${escapeHtml(profile.full_name || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-name" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Email</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="email" class="search-input" id="profile-email" value="${escapeHtml(profile.email || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-email" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Phone</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="text" class="search-input" id="profile-phone" value="${escapeHtml(profile.phone || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-phone" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Location</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="text" class="search-input" id="profile-location" value="${escapeHtml(profile.location || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-location" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">LinkedIn URL</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="url" class="search-input" id="profile-linkedin" value="${escapeHtml(profile.linkedin_url || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-linkedin" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">GitHub URL</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="url" class="search-input" id="profile-github" value="${escapeHtml(profile.github_url || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-github" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Portfolio URL</label>
+                    <div style="display:flex;gap:4px">
+                        <input type="url" class="search-input" id="profile-portfolio" value="${escapeHtml(profile.portfolio_url || '')}" style="flex:1">
+                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-portfolio" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="save-profile-btn">Save Profile</button>
+        </div>
 
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">AI Provider</h2>
@@ -944,6 +1041,33 @@ function renderSettingsContent(container, config, aiSettings = {}) {
         </div>
     `;
 
+    document.getElementById('save-profile-btn').addEventListener('click', async () => {
+        const profileData = {
+            full_name: document.getElementById('profile-name').value,
+            email: document.getElementById('profile-email').value,
+            phone: document.getElementById('profile-phone').value,
+            location: document.getElementById('profile-location').value,
+            linkedin_url: document.getElementById('profile-linkedin').value,
+            github_url: document.getElementById('profile-github').value,
+            portfolio_url: document.getElementById('profile-portfolio').value,
+        };
+        try {
+            await api.request('POST', '/api/profile', profileData);
+            showToast('Profile saved', 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    document.querySelectorAll('.profile-copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById(btn.dataset.field);
+            if (input && input.value) {
+                copyToClipboard(input.value);
+            }
+        });
+    });
+
     document.getElementById('upload-resume-btn').addEventListener('click', async () => {
         const fileInput = document.getElementById('resume-file');
         if (!fileInput.files.length) {
@@ -956,11 +1080,12 @@ function renderSettingsContent(container, config, aiSettings = {}) {
         try {
             const result = await api.uploadResume(fileInput.files[0]);
             showToast(`Resume analyzed! ${result.search_terms.length} search terms extracted.`, 'success');
-            const [updatedConfig, updatedAI] = await Promise.all([
+            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([
                 api.getSearchConfig(),
                 api.getAISettings(),
+                api.request('GET', '/api/profile'),
             ]);
-            renderSettingsContent(container, updatedConfig, updatedAI);
+            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
         } catch (err) {
             showToast(err.message, 'error');
         } finally {
@@ -1096,8 +1221,8 @@ function renderSettingsContent(container, config, aiSettings = {}) {
         try {
             await api.request('POST', '/api/clear-jobs');
             showToast('All jobs cleared', 'info');
-            const [updatedConfig, updatedAI] = await Promise.all([api.getSearchConfig(), api.getAISettings()]);
-            renderSettingsContent(container, updatedConfig, updatedAI);
+            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([api.getSearchConfig(), api.getAISettings(), api.request('GET', '/api/profile')]);
+            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
         } catch (err) {
             showToast(err.message, 'error');
         }
@@ -1110,8 +1235,8 @@ function renderSettingsContent(container, config, aiSettings = {}) {
         try {
             await api.request('POST', '/api/clear-all');
             showToast('All data reset', 'info');
-            const [updatedConfig, updatedAI] = await Promise.all([api.getSearchConfig(), api.getAISettings()]);
-            renderSettingsContent(container, updatedConfig, updatedAI);
+            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([api.getSearchConfig(), api.getAISettings(), api.request('GET', '/api/profile')]);
+            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
         } catch (err) {
             showToast(err.message, 'error');
         }

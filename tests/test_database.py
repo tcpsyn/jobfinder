@@ -144,6 +144,25 @@ async def test_add_and_get_events(db):
 
 
 @pytest.mark.asyncio
+async def test_save_and_get_profile(db):
+    await db.save_user_profile(full_name="John", email="john@example.com", phone="555-1234")
+    profile = await db.get_user_profile()
+    assert profile["full_name"] == "John"
+    assert profile["email"] == "john@example.com"
+    assert profile["phone"] == "555-1234"
+    assert profile["linkedin_url"] == ""  # default empty
+
+
+@pytest.mark.asyncio
+async def test_update_profile(db):
+    await db.save_user_profile(full_name="John")
+    await db.save_user_profile(full_name="Jane", email="jane@x.com")
+    profile = await db.get_user_profile()
+    assert profile["full_name"] == "Jane"
+    assert profile["email"] == "jane@x.com"
+
+
+@pytest.mark.asyncio
 async def test_dismiss_job(db):
     job_id = await db.insert_job(
         title="Dismiss me", company="Co", location="Remote",

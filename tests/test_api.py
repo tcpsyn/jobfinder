@@ -263,6 +263,25 @@ async def test_status_change_creates_event(client, app):
 
 
 @pytest.mark.asyncio
+async def test_profile_crud(client):
+    # GET should return empty profile
+    resp = await client.get("/api/profile")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["full_name"] == ""
+
+    # POST to save
+    resp = await client.post("/api/profile", json={"full_name": "Test User", "email": "test@x.com"})
+    assert resp.status_code == 200
+
+    # GET to verify
+    resp = await client.get("/api/profile")
+    data = resp.json()
+    assert data["full_name"] == "Test User"
+    assert data["email"] == "test@x.com"
+
+
+@pytest.mark.asyncio
 async def test_upload_resume_no_client(client, app):
     app.state._anthropic_client = None
     app.state.testing = True

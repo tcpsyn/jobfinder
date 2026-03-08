@@ -103,6 +103,17 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs(dedup_hash);
             CREATE INDEX IF NOT EXISTS idx_scores_job ON job_scores(job_id);
             CREATE INDEX IF NOT EXISTS idx_sources_job ON sources(job_id);
+            CREATE TABLE IF NOT EXISTS user_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                full_name TEXT NOT NULL DEFAULT '',
+                email TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                location TEXT NOT NULL DEFAULT '',
+                linkedin_url TEXT NOT NULL DEFAULT '',
+                github_url TEXT NOT NULL DEFAULT '',
+                portfolio_url TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_events_job ON app_events(job_id);
         """)
         await self._migrate()
@@ -399,6 +410,26 @@ class Database:
         """)
         await self.db.commit()
 
+    async def get_user_profile(self) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM user_profile WHERE id = 1")
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def save_user_profile(self, **fields):
+        now = datetime.now(timezone.utc).isoformat()
+        cols = ["full_name", "email", "phone", "location", "linkedin_url", "github_url", "portfolio_url"]
+        values = [fields.get(c, "") for c in cols]
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        update_str = ", ".join(f"{c} = excluded.{c}" for c in cols)
+        await self.db.execute(
+            f"""INSERT INTO user_profile (id, {col_str}, updated_at)
+                VALUES (1, {placeholders}, ?)
+                ON CONFLICT(id) DO UPDATE SET {update_str}, updated_at = excluded.updated_at""",
+            (*values, now)
+        )
+        await self.db.commit()
+
     async def clear_all(self):
         await self.db.executescript("""
             DELETE FROM sources;
@@ -408,6 +439,7 @@ class Database:
             DELETE FROM jobs;
             DELETE FROM search_config;
             DELETE FROM ai_settings;
+            DELETE FROM user_profile;
         """)
         await self.db.commit()
 
