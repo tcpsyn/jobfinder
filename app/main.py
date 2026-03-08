@@ -303,6 +303,9 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
 
     @app.post("/api/jobs/{job_id}/events")
     async def add_event(job_id: int, request: Request):
+        job = await app.state.db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
         body = await request.json()
         detail = body.get("detail", "")
         if not detail.strip():

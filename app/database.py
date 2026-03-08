@@ -127,6 +127,24 @@ class Database:
             if col not in columns:
                 await self.db.execute(sql)
 
+        # One-time migration: move notes from applications to app_events
+        cursor = await self.db.execute(
+            "SELECT job_id, notes FROM applications WHERE notes IS NOT NULL AND notes != ''"
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            job_id, notes = row[0], row[1]
+            existing = await self.db.execute(
+                "SELECT 1 FROM app_events WHERE job_id = ? AND event_type = 'note' AND detail = ?",
+                (job_id, notes)
+            )
+            if not await existing.fetchone():
+                now = datetime.now(timezone.utc).isoformat()
+                await self.db.execute(
+                    "INSERT INTO app_events (job_id, event_type, detail, created_at) VALUES (?, 'note', ?, ?)",
+                    (job_id, notes, now)
+                )
+
     async def insert_job(self, title, company, location, salary_min, salary_max,
                          description, url, posted_date, application_method, contact_email):
         dedup = make_dedup_hash(title, company, url)
