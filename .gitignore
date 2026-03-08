@@ -2,7 +2,6 @@
 __pycache__/
 *.pyc
 .env
-data/*.db
-data/*.db-*
+data/
 *.egg-info/
 .pytest_cache/

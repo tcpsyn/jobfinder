@@ -8,14 +8,14 @@ def test_draft_email():
         company="TechCorp",
         position="Senior DevOps Engineer",
         cover_letter="Dear Hiring Manager,\n\nI am writing...",
-        sender_name="Luke MacNeil",
-        sender_email="tcpsyn@gmail.com",
+        sender_name="John Doe",
+        sender_email="user@example.com",
     )
     assert email["to"] == "jobs@techcorp.com"
     assert "Senior DevOps Engineer" in email["subject"]
     assert "TechCorp" in email["subject"]
     assert "Dear Hiring Manager" in email["body"]
-    assert "Luke MacNeil" in email["body"]
+    assert "John Doe" in email["body"]
 
 
 def test_draft_email_no_contact():
@@ -24,8 +24,8 @@ def test_draft_email_no_contact():
         company="TechCorp",
         position="Senior DevOps Engineer",
         cover_letter="Dear Hiring Manager...",
-        sender_name="Luke MacNeil",
-        sender_email="tcpsyn@gmail.com",
+        sender_name="John Doe",
+        sender_email="user@example.com",
     )
     assert email is None
 
