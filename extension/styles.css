@@ -1,0 +1,205 @@
+/* CareerPulse AutoFill — content script styles
+   All classes prefixed with cp-autofill- to avoid conflicts */
+
+/* ─── Overlay ────────────────────────────────────────────── */
+
+#cp-autofill-overlay {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 280px;
+  background: rgba(24, 24, 27, 0.95);
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  z-index: 999999;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.cp-autofill-overlay-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(59, 130, 246, 0.15);
+  border-bottom: 1px solid #3f3f46;
+}
+
+.cp-autofill-overlay-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #3b82f6;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.cp-autofill-overlay-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.cp-autofill-overlay-actions button {
+  background: none;
+  border: none;
+  color: #71717a;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.cp-autofill-overlay-actions button:hover {
+  background: #27272a;
+  color: #fff;
+}
+
+.cp-autofill-overlay-body {
+  padding: 12px 14px;
+}
+
+.cp-autofill-overlay-status {
+  color: #a1a1aa;
+  line-height: 1.4;
+}
+
+/* ─── Field highlights ───────────────────────────────────── */
+
+.cp-autofill-filled {
+  box-shadow: 0 0 0 2px #22c55e60, 0 0 8px #22c55e30 !important;
+  outline: none !important;
+}
+
+.cp-autofill-review {
+  box-shadow: 0 0 0 2px #eab30860, 0 0 8px #eab30830 !important;
+  outline: none !important;
+}
+
+/* ─── Learn prompt modal ─────────────────────────────────── */
+
+#cp-autofill-learn-prompt {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.cp-autofill-learn-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.cp-autofill-learn-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 420px;
+  max-width: 90vw;
+  max-height: 70vh;
+  background: #18181b;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  color: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cp-autofill-learn-title {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 16px 20px;
+  margin: 0;
+  border-bottom: 1px solid #27272a;
+}
+
+.cp-autofill-learn-list {
+  padding: 8px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.cp-autofill-learn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  border-bottom: 1px solid #27272a;
+  cursor: pointer;
+}
+
+.cp-autofill-learn-item:last-child {
+  border-bottom: none;
+}
+
+.cp-autofill-learn-item input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: #3b82f6;
+}
+
+.cp-autofill-learn-item-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cp-autofill-learn-item-label {
+  font-size: 12px;
+  color: #71717a;
+}
+
+.cp-autofill-learn-item-value {
+  font-size: 13px;
+  color: #e4e4e7;
+  word-break: break-word;
+}
+
+.cp-autofill-learn-actions {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #27272a;
+  justify-content: flex-end;
+}
+
+.cp-autofill-learn-save {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cp-autofill-learn-save:hover {
+  background: #2563eb;
+}
+
+.cp-autofill-learn-dismiss {
+  background: #27272a;
+  color: #a1a1aa;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cp-autofill-learn-dismiss:hover {
+  background: #3f3f46;
+  color: #fff;
+}

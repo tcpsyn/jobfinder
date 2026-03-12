@@ -115,6 +115,109 @@ class Database:
                 updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_events_job ON app_events(job_id);
+            CREATE TABLE IF NOT EXISTS work_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                company TEXT NOT NULL DEFAULT '',
+                job_title TEXT NOT NULL DEFAULT '',
+                location_city TEXT NOT NULL DEFAULT '',
+                location_state TEXT NOT NULL DEFAULT '',
+                location_country TEXT NOT NULL DEFAULT '',
+                start_month INTEGER,
+                start_year INTEGER,
+                end_month INTEGER,
+                end_year INTEGER,
+                is_current INTEGER DEFAULT 0,
+                description TEXT NOT NULL DEFAULT '',
+                salary_at_position TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS education (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                school TEXT NOT NULL DEFAULT '',
+                degree_type TEXT NOT NULL DEFAULT '',
+                field_of_study TEXT NOT NULL DEFAULT '',
+                minor TEXT NOT NULL DEFAULT '',
+                start_month INTEGER,
+                start_year INTEGER,
+                grad_month INTEGER,
+                grad_year INTEGER,
+                gpa TEXT NOT NULL DEFAULT '',
+                honors TEXT NOT NULL DEFAULT '',
+                sort_order INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS certifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                name TEXT NOT NULL DEFAULT '',
+                issuing_org TEXT NOT NULL DEFAULT '',
+                cert_type TEXT NOT NULL DEFAULT 'certification',
+                license_number TEXT NOT NULL DEFAULT '',
+                state TEXT NOT NULL DEFAULT '',
+                date_obtained TEXT NOT NULL DEFAULT '',
+                expiration_date TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS skills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                name TEXT NOT NULL DEFAULT '',
+                years_experience INTEGER,
+                proficiency TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS languages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                language TEXT NOT NULL DEFAULT '',
+                proficiency TEXT NOT NULL DEFAULT 'conversational'
+            );
+            CREATE TABLE IF NOT EXISTS user_references (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1,
+                name TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                company TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                email TEXT NOT NULL DEFAULT '',
+                relationship TEXT NOT NULL DEFAULT '',
+                years_known INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS military_service (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 1 CHECK (id = 1),
+                branch TEXT NOT NULL DEFAULT '',
+                rank TEXT NOT NULL DEFAULT '',
+                specialty TEXT NOT NULL DEFAULT '',
+                start_date TEXT NOT NULL DEFAULT '',
+                end_date TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS eeo_responses (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                gender TEXT NOT NULL DEFAULT '',
+                race_ethnicity TEXT NOT NULL DEFAULT '',
+                disability_status TEXT NOT NULL DEFAULT '',
+                veteran_status TEXT NOT NULL DEFAULT '',
+                veteran_categories TEXT NOT NULL DEFAULT '[]',
+                sexual_orientation TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS custom_qa (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_pattern TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT '',
+                answer TEXT NOT NULL DEFAULT '',
+                times_used INTEGER DEFAULT 0,
+                last_used TEXT
+            );
+            CREATE TABLE IF NOT EXISTS autofill_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_url TEXT NOT NULL DEFAULT '',
+                job_title TEXT NOT NULL DEFAULT '',
+                company TEXT NOT NULL DEFAULT '',
+                fields_filled TEXT NOT NULL DEFAULT '[]',
+                fields_skipped TEXT NOT NULL DEFAULT '[]',
+                new_data_saved TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS scraper_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
@@ -172,6 +275,56 @@ class Database:
         for col, sql in jobs_migrations.items():
             if col not in jobs_columns:
                 await self.db.execute(sql)
+
+        # user_profile migrations - add new columns
+        profile_cursor = await self.db.execute("PRAGMA table_info(user_profile)")
+        profile_columns = {row[1] for row in await profile_cursor.fetchall()}
+        profile_migrations = {
+            "middle_name": "ALTER TABLE user_profile ADD COLUMN middle_name TEXT NOT NULL DEFAULT ''",
+            "preferred_name": "ALTER TABLE user_profile ADD COLUMN preferred_name TEXT NOT NULL DEFAULT ''",
+            "phone_country_code": "ALTER TABLE user_profile ADD COLUMN phone_country_code TEXT NOT NULL DEFAULT ''",
+            "phone_type": "ALTER TABLE user_profile ADD COLUMN phone_type TEXT NOT NULL DEFAULT ''",
+            "additional_phone": "ALTER TABLE user_profile ADD COLUMN additional_phone TEXT NOT NULL DEFAULT ''",
+            "address_street1": "ALTER TABLE user_profile ADD COLUMN address_street1 TEXT NOT NULL DEFAULT ''",
+            "address_street2": "ALTER TABLE user_profile ADD COLUMN address_street2 TEXT NOT NULL DEFAULT ''",
+            "address_city": "ALTER TABLE user_profile ADD COLUMN address_city TEXT NOT NULL DEFAULT ''",
+            "address_state": "ALTER TABLE user_profile ADD COLUMN address_state TEXT NOT NULL DEFAULT ''",
+            "address_zip": "ALTER TABLE user_profile ADD COLUMN address_zip TEXT NOT NULL DEFAULT ''",
+            "address_country_code": "ALTER TABLE user_profile ADD COLUMN address_country_code TEXT NOT NULL DEFAULT ''",
+            "address_country_name": "ALTER TABLE user_profile ADD COLUMN address_country_name TEXT NOT NULL DEFAULT ''",
+            "perm_address_street1": "ALTER TABLE user_profile ADD COLUMN perm_address_street1 TEXT NOT NULL DEFAULT ''",
+            "perm_address_street2": "ALTER TABLE user_profile ADD COLUMN perm_address_street2 TEXT NOT NULL DEFAULT ''",
+            "perm_address_city": "ALTER TABLE user_profile ADD COLUMN perm_address_city TEXT NOT NULL DEFAULT ''",
+            "perm_address_state": "ALTER TABLE user_profile ADD COLUMN perm_address_state TEXT NOT NULL DEFAULT ''",
+            "perm_address_zip": "ALTER TABLE user_profile ADD COLUMN perm_address_zip TEXT NOT NULL DEFAULT ''",
+            "perm_address_country_code": "ALTER TABLE user_profile ADD COLUMN perm_address_country_code TEXT NOT NULL DEFAULT ''",
+            "perm_address_country_name": "ALTER TABLE user_profile ADD COLUMN perm_address_country_name TEXT NOT NULL DEFAULT ''",
+            "date_of_birth": "ALTER TABLE user_profile ADD COLUMN date_of_birth TEXT NOT NULL DEFAULT ''",
+            "pronouns": "ALTER TABLE user_profile ADD COLUMN pronouns TEXT NOT NULL DEFAULT ''",
+            "website_url": "ALTER TABLE user_profile ADD COLUMN website_url TEXT NOT NULL DEFAULT ''",
+            "drivers_license": "ALTER TABLE user_profile ADD COLUMN drivers_license TEXT NOT NULL DEFAULT ''",
+            "drivers_license_class": "ALTER TABLE user_profile ADD COLUMN drivers_license_class TEXT NOT NULL DEFAULT ''",
+            "drivers_license_state": "ALTER TABLE user_profile ADD COLUMN drivers_license_state TEXT NOT NULL DEFAULT ''",
+            "country_of_citizenship": "ALTER TABLE user_profile ADD COLUMN country_of_citizenship TEXT NOT NULL DEFAULT ''",
+            "authorized_to_work_us": "ALTER TABLE user_profile ADD COLUMN authorized_to_work_us TEXT NOT NULL DEFAULT ''",
+            "requires_sponsorship": "ALTER TABLE user_profile ADD COLUMN requires_sponsorship TEXT NOT NULL DEFAULT ''",
+            "authorization_type": "ALTER TABLE user_profile ADD COLUMN authorization_type TEXT NOT NULL DEFAULT ''",
+            "security_clearance": "ALTER TABLE user_profile ADD COLUMN security_clearance TEXT NOT NULL DEFAULT ''",
+            "clearance_status": "ALTER TABLE user_profile ADD COLUMN clearance_status TEXT NOT NULL DEFAULT ''",
+            "desired_salary_min": "ALTER TABLE user_profile ADD COLUMN desired_salary_min INTEGER",
+            "desired_salary_max": "ALTER TABLE user_profile ADD COLUMN desired_salary_max INTEGER",
+            "salary_period": "ALTER TABLE user_profile ADD COLUMN salary_period TEXT NOT NULL DEFAULT ''",
+            "availability_date": "ALTER TABLE user_profile ADD COLUMN availability_date TEXT NOT NULL DEFAULT ''",
+            "notice_period": "ALTER TABLE user_profile ADD COLUMN notice_period TEXT NOT NULL DEFAULT ''",
+            "willing_to_relocate": "ALTER TABLE user_profile ADD COLUMN willing_to_relocate TEXT NOT NULL DEFAULT ''",
+            "how_heard_default": "ALTER TABLE user_profile ADD COLUMN how_heard_default TEXT NOT NULL DEFAULT ''",
+            "cover_letter_template": "ALTER TABLE user_profile ADD COLUMN cover_letter_template TEXT NOT NULL DEFAULT ''",
+            "background_check_consent": "ALTER TABLE user_profile ADD COLUMN background_check_consent TEXT NOT NULL DEFAULT ''",
+        }
+        if profile_columns:
+            for col, sql in profile_migrations.items():
+                if col not in profile_columns:
+                    await self.db.execute(sql)
 
         # One-time migration: move notes from applications to app_events
         cursor = await self.db.execute(
@@ -272,7 +425,7 @@ class Database:
     async def list_jobs(self, sort_by="score", limit=50, offset=0, min_score=None,
                         search=None, source=None, dismissed=False,
                         work_type=None, employment_type=None, location=None,
-                        exclude_terms=None):
+                        exclude_terms=None, region=None, clearance=None):
         query = """
             SELECT j.*, js.match_score, js.match_reasons, js.concerns, a.status as app_status
             FROM jobs j
@@ -309,6 +462,28 @@ class Database:
             for term in exclude_terms:
                 query += " AND LOWER(j.title) NOT LIKE ? AND LOWER(j.description) NOT LIKE ?"
                 params.extend([f"%{term.lower()}%", f"%{term.lower()}%"])
+        if region:
+            region_map = {
+                "us": ["%united states%", "%usa%", "% us %", "% us,", "%u.s.%"],
+                "europe": ["%europe%", "%germany%", "%france%", "%netherlands%", "%spain%", "%italy%", "%poland%", "%sweden%", "%ireland%", "%portugal%", "%austria%", "%switzerland%", "%belgium%", "%denmark%", "%norway%", "%finland%", "%czech%", "% eu %", "% eu,%", "%emea%"],
+                "uk": ["%united kingdom%", "% uk %", "% uk,%", "%england%", "%london%", "%scotland%", "%wales%"],
+                "canada": ["%canada%", "%canadian%", "%toronto%", "%vancouver%", "%montreal%", "%ottawa%"],
+                "latam": ["%latin america%", "%latam%", "%brazil%", "%mexico%", "%argentina%", "%colombia%", "%chile%"],
+                "apac": ["%asia%", "%pacific%", "%apac%", "%australia%", "%japan%", "%india%", "%singapore%", "%korea%", "%new zealand%"],
+            }
+            patterns = region_map.get(region, [])
+            if patterns:
+                clauses = " OR ".join("LOWER(j.location) LIKE ?" for _ in patterns)
+                query += f" AND ({clauses})"
+                params.extend(patterns)
+        if clearance:
+            clearance_terms = ["%clearance%", "%security clearance%", "%top secret%", "%ts/sci%", "%public trust%", "%green card%", "%greencard%", "%us citizen%", "%u.s. citizen%", "%citizenship required%", "%must be a us%", "%must be a u.s.%", "%permanent resident%", "%work authorization%", "%visa sponsor%", "%no visa%", "%eadauthorization%"]
+            clauses = " OR ".join("LOWER(j.description) LIKE ?" for _ in clearance_terms)
+            if clearance == "hide":
+                query += f" AND NOT ({clauses})"
+            elif clearance == "only":
+                query += f" AND ({clauses})"
+            params.extend(clearance_terms)
         if sort_by == "score":
             query += " ORDER BY js.match_score DESC NULLS LAST"
         elif sort_by == "freshest":
@@ -526,8 +701,23 @@ class Database:
 
     async def save_user_profile(self, **fields):
         now = datetime.now(timezone.utc).isoformat()
-        cols = ["full_name", "email", "phone", "location", "linkedin_url", "github_url", "portfolio_url"]
-        values = [fields.get(c, "") for c in cols]
+        # Merge with existing profile to avoid blanking out columns not provided
+        existing = await self.get_user_profile()
+        if existing:
+            existing.pop("id", None)
+            existing.pop("updated_at", None)
+            merged = existing
+            merged.update(fields)
+        else:
+            merged = fields
+        # Get actual columns from the table to handle both old and new schemas
+        cursor = await self.db.execute("PRAGMA table_info(user_profile)")
+        all_cols = {row[1] for row in await cursor.fetchall()}
+        all_cols.discard("id")
+        all_cols.discard("updated_at")
+        int_cols = {"desired_salary_min", "desired_salary_max"}
+        cols = sorted(all_cols)
+        values = [merged.get(c) if c in int_cols else merged.get(c, "") for c in cols]
         placeholders = ", ".join("?" for _ in cols)
         col_str = ", ".join(cols)
         update_str = ", ".join(f"{c} = excluded.{c}" for c in cols)
@@ -538,6 +728,348 @@ class Database:
             (*values, now)
         )
         await self.db.commit()
+
+    async def get_full_profile(self) -> dict:
+        profile = await self.get_user_profile()
+        if not profile:
+            profile = {}
+        profile["work_history"] = await self.get_work_history()
+        profile["education"] = await self.get_education()
+        profile["certifications"] = await self.get_certifications()
+        profile["skills"] = await self.get_skills()
+        profile["languages"] = await self.get_languages()
+        profile["references"] = await self.get_references()
+        profile["military"] = await self.get_military_service()
+        profile["eeo"] = await self.get_eeo_responses()
+        return profile
+
+    async def save_full_profile(self, data: dict):
+        nested_keys = {"work_history", "education", "certifications", "skills",
+                        "languages", "references", "military", "eeo"}
+        profile_fields = {k: v for k, v in data.items() if k not in nested_keys}
+        if profile_fields:
+            # Merge with existing profile so we don't blank out fields not sent
+            existing = await self.get_user_profile() or {}
+            existing.pop("id", None)
+            existing.pop("updated_at", None)
+            existing.update(profile_fields)
+            await self.save_user_profile(**existing)
+
+        if "work_history" in data:
+            await self._replace_list("work_history", data["work_history"])
+        if "education" in data:
+            await self._replace_list("education", data["education"])
+        if "certifications" in data:
+            await self._replace_list("certifications", data["certifications"])
+        if "skills" in data:
+            await self._replace_list("skills", data["skills"])
+        if "languages" in data:
+            await self._replace_list("languages", data["languages"])
+        if "references" in data:
+            await self._replace_list("user_references", data["references"])
+        if "military" in data:
+            await self.save_military_service(data["military"])
+        if "eeo" in data:
+            await self.save_eeo_responses(data["eeo"])
+
+    async def _replace_list(self, table: str, items: list):
+        await self.db.execute(f"DELETE FROM {table} WHERE user_id = 1")
+        for i, item in enumerate(items):
+            item.pop("id", None)
+            item["user_id"] = 1
+            if "sort_order" in self._get_table_cols(table):
+                item.setdefault("sort_order", i)
+            cols = list(item.keys())
+            vals = list(item.values())
+            placeholders = ", ".join("?" for _ in cols)
+            col_str = ", ".join(cols)
+            await self.db.execute(f"INSERT INTO {table} ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+
+    def _get_table_cols(self, table: str) -> set:
+        # Simple mapping of tables that have sort_order
+        tables_with_sort = {"work_history", "education"}
+        if table in tables_with_sort:
+            return {"sort_order"}
+        return set()
+
+    # Work history CRUD
+    async def get_work_history(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM work_history WHERE user_id = ? ORDER BY sort_order, start_year DESC", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_work_history(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE work_history SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO work_history ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_work_history(self, entry_id: int):
+        await self.db.execute("DELETE FROM work_history WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # Education CRUD
+    async def get_education(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM education WHERE user_id = ? ORDER BY sort_order, start_year DESC", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_education(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE education SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO education ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_education(self, entry_id: int):
+        await self.db.execute("DELETE FROM education WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # Certifications CRUD
+    async def get_certifications(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM certifications WHERE user_id = ? ORDER BY date_obtained DESC", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_certification(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE certifications SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO certifications ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_certification(self, entry_id: int):
+        await self.db.execute("DELETE FROM certifications WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # Skills CRUD
+    async def get_skills(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM skills WHERE user_id = ? ORDER BY name", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_skill(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE skills SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO skills ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_skill(self, entry_id: int):
+        await self.db.execute("DELETE FROM skills WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # Languages CRUD
+    async def get_languages(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM languages WHERE user_id = ? ORDER BY language", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_language(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE languages SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO languages ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_language(self, entry_id: int):
+        await self.db.execute("DELETE FROM languages WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # References CRUD
+    async def get_references(self, user_id: int = 1) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM user_references WHERE user_id = ? ORDER BY name", (user_id,))
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def save_reference(self, entry: dict) -> int:
+        entry.setdefault("user_id", 1)
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE user_references SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO user_references ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_reference(self, entry_id: int):
+        await self.db.execute("DELETE FROM user_references WHERE id = ?", (entry_id,))
+        await self.db.commit()
+
+    # Military service CRUD (singleton)
+    async def get_military_service(self) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM military_service WHERE id = 1")
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def save_military_service(self, fields: dict):
+        fields.pop("id", None)
+        fields.pop("user_id", None)
+        cols = list(fields.keys())
+        vals = list(fields.values())
+        if not cols:
+            return
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        update_str = ", ".join(f"{c} = excluded.{c}" for c in cols)
+        await self.db.execute(
+            f"""INSERT INTO military_service (id, user_id, {col_str})
+                VALUES (1, 1, {placeholders})
+                ON CONFLICT(id) DO UPDATE SET {update_str}""",
+            vals)
+        await self.db.commit()
+
+    # EEO responses CRUD (singleton)
+    async def get_eeo_responses(self) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM eeo_responses WHERE id = 1")
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["veteran_categories"] = json.loads(d.get("veteran_categories", "[]"))
+        return d
+
+    async def save_eeo_responses(self, fields: dict):
+        fields.pop("id", None)
+        if "veteran_categories" in fields and isinstance(fields["veteran_categories"], list):
+            fields["veteran_categories"] = json.dumps(fields["veteran_categories"])
+        cols = list(fields.keys())
+        vals = list(fields.values())
+        if not cols:
+            return
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        update_str = ", ".join(f"{c} = excluded.{c}" for c in cols)
+        await self.db.execute(
+            f"""INSERT INTO eeo_responses (id, {col_str})
+                VALUES (1, {placeholders})
+                ON CONFLICT(id) DO UPDATE SET {update_str}""",
+            vals)
+        await self.db.commit()
+
+    # Custom Q&A CRUD
+    async def get_custom_qa(self) -> list[dict]:
+        cursor = await self.db.execute("SELECT * FROM custom_qa ORDER BY times_used DESC")
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def get_custom_qa_by_id(self, qa_id: int) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM custom_qa WHERE id = ?", (qa_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def save_custom_qa(self, entry: dict) -> int:
+        entry_id = entry.pop("id", None)
+        if entry_id:
+            sets = ", ".join(f"{k} = ?" for k in entry)
+            vals = list(entry.values()) + [entry_id]
+            await self.db.execute(f"UPDATE custom_qa SET {sets} WHERE id = ?", vals)
+            await self.db.commit()
+            return entry_id
+        cols = list(entry.keys())
+        vals = list(entry.values())
+        placeholders = ", ".join("?" for _ in cols)
+        col_str = ", ".join(cols)
+        cursor = await self.db.execute(
+            f"INSERT INTO custom_qa ({col_str}) VALUES ({placeholders})", vals)
+        await self.db.commit()
+        return cursor.lastrowid
+
+    async def delete_custom_qa(self, qa_id: int):
+        await self.db.execute("DELETE FROM custom_qa WHERE id = ?", (qa_id,))
+        await self.db.commit()
+
+    # Autofill history CRUD
+    async def get_autofill_history(self, limit: int = 50) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM autofill_history ORDER BY created_at DESC LIMIT ?", (limit,))
+        rows = await cursor.fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["fields_filled"] = json.loads(d.get("fields_filled", "[]"))
+            d["fields_skipped"] = json.loads(d.get("fields_skipped", "[]"))
+            d["new_data_saved"] = json.loads(d.get("new_data_saved", "{}"))
+            result.append(d)
+        return result
+
+    async def save_autofill_history(self, job_url: str, job_title: str, company: str,
+                                     fields_filled: list = None, fields_skipped: list = None,
+                                     new_data_saved: dict = None) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = await self.db.execute(
+            """INSERT INTO autofill_history (job_url, job_title, company, fields_filled,
+               fields_skipped, new_data_saved, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (job_url, job_title, company,
+             json.dumps(fields_filled or []), json.dumps(fields_skipped or []),
+             json.dumps(new_data_saved or {}), now))
+        await self.db.commit()
+        return cursor.lastrowid
 
     async def clear_all(self):
         await self.db.executescript("""
@@ -550,6 +1082,16 @@ class Database:
             DELETE FROM ai_settings;
             DELETE FROM user_profile;
             DELETE FROM companies;
+            DELETE FROM work_history;
+            DELETE FROM education;
+            DELETE FROM certifications;
+            DELETE FROM skills;
+            DELETE FROM languages;
+            DELETE FROM user_references;
+            DELETE FROM military_service;
+            DELETE FROM eeo_responses;
+            DELETE FROM custom_qa;
+            DELETE FROM autofill_history;
         """)
         await self.db.commit()
 

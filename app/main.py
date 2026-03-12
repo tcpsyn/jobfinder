@@ -173,6 +173,8 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         work_type: str | None = Query(None),
         employment_type: str | None = Query(None),
         location: str | None = Query(None),
+        region: str | None = Query(None),
+        clearance: str | None = Query(None),
     ):
         config = await app.state.db.get_search_config()
         exclude_terms = config.get("exclude_terms", []) if config else []
@@ -181,6 +183,7 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
             min_score=min_score, search=search, source=source,
             work_type=work_type, employment_type=employment_type,
             location=location, exclude_terms=exclude_terms,
+            region=region, clearance=clearance,
         )
         return {"jobs": jobs}
 
@@ -530,9 +533,194 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
     @app.post("/api/profile")
     async def update_profile(request: Request):
         body = await request.json()
-        allowed = {"full_name", "email", "phone", "location", "linkedin_url", "github_url", "portfolio_url"}
-        filtered = {k: v for k, v in body.items() if k in allowed}
-        await app.state.db.save_user_profile(**filtered)
+        # save_user_profile dynamically checks table columns, so pass all fields
+        body.pop("id", None)
+        body.pop("updated_at", None)
+        await app.state.db.save_user_profile(**body)
+        return {"ok": True}
+
+    @app.get("/api/profile/full")
+    async def get_full_profile():
+        return await app.state.db.get_full_profile()
+
+    @app.put("/api/profile/full")
+    async def update_full_profile(request: Request):
+        body = await request.json()
+        await app.state.db.save_full_profile(body)
+        return {"ok": True}
+
+    @app.post("/api/profile/learn")
+    async def learn_from_autofill(request: Request):
+        body = await request.json()
+        job_url = body.get("job_url", "")
+        job_title = body.get("job_title", "")
+        company = body.get("company", "")
+        new_data = body.get("new_data", {})
+
+        if new_data:
+            existing = await app.state.db.get_user_profile() or {}
+            existing.pop("id", None)
+            existing.pop("updated_at", None)
+            updated = {k: v for k, v in new_data.items() if v}
+            existing.update(updated)
+            await app.state.db.save_user_profile(**existing)
+
+        await app.state.db.save_autofill_history(
+            job_url=job_url, job_title=job_title, company=company,
+            new_data_saved=new_data,
+        )
+        return {"ok": True}
+
+    @app.get("/api/custom-qa")
+    async def list_custom_qa():
+        return {"items": await app.state.db.get_custom_qa()}
+
+    @app.post("/api/custom-qa")
+    async def save_custom_qa(request: Request):
+        body = await request.json()
+        qa_id = await app.state.db.save_custom_qa(body)
+        return {"ok": True, "id": qa_id}
+
+    @app.delete("/api/custom-qa/{qa_id}")
+    async def delete_custom_qa(qa_id: int):
+        await app.state.db.delete_custom_qa(qa_id)
+        return {"ok": True}
+
+    @app.post("/api/autofill/analyze")
+    async def analyze_form(request: Request):
+        body = await request.json()
+        form_html = body.get("form_html", "")
+        form_fields = body.get("fields", [])
+        page_url = body.get("page_url", "")
+
+        client = getattr(app.state, "ai_client", None)
+        if not client:
+            return {"mappings": [], "error": "No AI provider configured"}
+
+        profile = await app.state.db.get_full_profile()
+        custom_qa = await app.state.db.get_custom_qa()
+
+        profile_summary = json.dumps(profile, default=str, indent=2)
+        qa_summary = json.dumps(custom_qa, default=str) if custom_qa else "[]"
+        fields_summary = json.dumps(form_fields[:200], default=str, indent=2)
+
+        prompt = f"""You are a job application autofill assistant. Analyze the form fields below and map them to the user's profile data.
+
+USER PROFILE:
+{profile_summary}
+
+CUSTOM Q&A BANK:
+{qa_summary}
+
+FORM FIELDS (JSON array of field objects with id, name, type, label, placeholder, options):
+{fields_summary}
+
+PAGE URL: {page_url}
+
+For each form field, determine the best value from the profile. Return a JSON array of objects:
+[
+  {{"selector": "#field-id-or-name", "value": "the value to fill", "action": "fill_text|select_dropdown|click_radio|check_checkbox|skip", "confidence": 0.0-1.0, "field_label": "human readable label"}}
+]
+
+Rules:
+- Use CSS selector format (#id or [name="xxx"]) for selector
+- For dropdowns, match the closest option text
+- For radio/checkbox, set value to the option to select
+- Skip fields you can't confidently fill (set action to "skip")
+- For EEO/voluntary self-ID fields, use the user's stored preferences (default to "Decline" if not set)
+- For "How did you hear about us?" type questions, use "Online Job Board" or similar generic answer
+- Be smart about phone format, date format, and country codes based on what the form expects
+- Return ONLY the JSON array, no other text"""
+
+        try:
+            response = await client.chat(prompt, max_tokens=4000)
+            # Parse JSON from response
+            text = response.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+                text = text.rsplit("```", 1)[0]
+            mappings = json.loads(text)
+            return {"mappings": mappings}
+        except json.JSONDecodeError:
+            return {"mappings": [], "error": "Failed to parse AI response"}
+        except Exception as e:
+            logger.error(f"Autofill analyze failed: {e}")
+            raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+    @app.get("/api/autofill/history")
+    async def get_autofill_history(limit: int = Query(50)):
+        return {"items": await app.state.db.get_autofill_history(limit=limit)}
+
+    # Work History CRUD
+    @app.post("/api/work-history")
+    async def save_work_history(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_work_history(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/work-history/{entry_id}")
+    async def delete_work_history(entry_id: int):
+        await app.state.db.delete_work_history(entry_id)
+        return {"ok": True}
+
+    # Education CRUD
+    @app.post("/api/education")
+    async def save_education(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_education(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/education/{entry_id}")
+    async def delete_education(entry_id: int):
+        await app.state.db.delete_education(entry_id)
+        return {"ok": True}
+
+    # Certifications CRUD
+    @app.post("/api/certifications")
+    async def save_certification(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_certification(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/certifications/{entry_id}")
+    async def delete_certification(entry_id: int):
+        await app.state.db.delete_certification(entry_id)
+        return {"ok": True}
+
+    # Skills CRUD
+    @app.post("/api/skills")
+    async def save_skill(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_skill(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/skills/{entry_id}")
+    async def delete_skill(entry_id: int):
+        await app.state.db.delete_skill(entry_id)
+        return {"ok": True}
+
+    # Languages CRUD
+    @app.post("/api/languages")
+    async def save_language(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_language(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/languages/{entry_id}")
+    async def delete_language(entry_id: int):
+        await app.state.db.delete_language(entry_id)
+        return {"ok": True}
+
+    # References CRUD
+    @app.post("/api/references")
+    async def save_reference(request: Request):
+        body = await request.json()
+        entry_id = await app.state.db.save_reference(body)
+        return {"ok": True, "id": entry_id}
+
+    @app.delete("/api/references/{entry_id}")
+    async def delete_reference(entry_id: int):
+        await app.state.db.delete_reference(entry_id)
         return {"ok": True}
 
     @app.get("/api/search-config")

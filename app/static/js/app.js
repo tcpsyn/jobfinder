@@ -251,6 +251,20 @@ async function renderFeed(container) {
                 <option value="parttime">Part-time</option>
             </select>
             <input type="text" class="search-input" id="filter-location" placeholder="Location..." style="max-width:160px">
+            <select class="filter-select" id="filter-region">
+                <option value="">All regions</option>
+                <option value="us">US</option>
+                <option value="europe">Europe</option>
+                <option value="uk">UK</option>
+                <option value="canada">Canada</option>
+                <option value="latam">Latin America</option>
+                <option value="apac">Asia-Pacific</option>
+            </select>
+            <select class="filter-select" id="filter-clearance">
+                <option value="">Any clearance</option>
+                <option value="hide">Hide clearance/visa required</option>
+                <option value="only">Only clearance/visa required</option>
+            </select>
         </div>
         <div class="job-list" id="job-list"></div>
         <div id="load-more-container" style="padding:24px 0;text-align:center;display:none">
@@ -264,6 +278,8 @@ async function renderFeed(container) {
     const workTypeSelect = document.getElementById('filter-work-type');
     const employmentSelect = document.getElementById('filter-employment');
     const locationInput = document.getElementById('filter-location');
+    const regionSelect = document.getElementById('filter-region');
+    const clearanceSelect = document.getElementById('filter-clearance');
     const loadMoreBtn = document.getElementById('load-more-btn');
 
     let debounceTimer;
@@ -284,6 +300,8 @@ async function renderFeed(container) {
     sortSelect.addEventListener('change', reload);
     workTypeSelect.addEventListener('change', reload);
     employmentSelect.addEventListener('change', reload);
+    regionSelect.addEventListener('change', reload);
+    clearanceSelect.addEventListener('change', reload);
     loadMoreBtn.addEventListener('click', () => loadJobs(true));
 
     await loadJobs(false);
@@ -310,6 +328,8 @@ async function loadJobs(append) {
         work_type: document.getElementById('filter-work-type')?.value || '',
         employment_type: document.getElementById('filter-employment')?.value || '',
         location: document.getElementById('filter-location')?.value || '',
+        region: document.getElementById('filter-region')?.value || '',
+        clearance: document.getElementById('filter-clearance')?.value || '',
     };
 
     try {
@@ -1139,67 +1159,548 @@ async function handleScrape() {
 }
 
 // === Settings View ===
+let settingsActiveTab = 'profile';
+let settingsData = {};
+
 async function renderSettings(container) {
     container.innerHTML = `<div class="loading-container"><div class="spinner spinner-lg"></div><span>Loading settings...</span></div>`;
 
     try {
-        const [config, aiSettings, profile, scraperKeys] = await Promise.all([
+        const [config, aiSettings, profile, fullProfile, scraperKeys, customQA] = await Promise.all([
             api.getSearchConfig(),
             api.getAISettings(),
             api.request('GET', '/api/profile'),
+            api.request('GET', '/api/profile/full'),
             api.request('GET', '/api/scraper-keys'),
+            api.request('GET', '/api/custom-qa'),
         ]);
-        renderSettingsContent(container, config, aiSettings, profile);
-        loadScraperKeys(scraperKeys);
+        settingsData = { config, aiSettings, profile, fullProfile, scraperKeys, customQA: customQA.items || [] };
+        renderSettingsShell(container);
     } catch (err) {
         showToast(err.message, 'error');
         container.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load settings</div></div>`;
     }
 }
 
-function loadScraperKeys(keys) {
-    if (keys.usajobs) {
-        if (keys.usajobs.has_key) document.getElementById('scraper-key-usajobs').value = '****';
-        if (keys.usajobs.email) document.getElementById('scraper-email-usajobs').value = keys.usajobs.email;
+function renderSettingsShell(container) {
+    const tabs = [
+        { id: 'profile', label: 'Profile' },
+        { id: 'work-history', label: 'Work History' },
+        { id: 'job-search', label: 'Job Search' },
+        { id: 'integrations', label: 'AI & Integrations' },
+        { id: 'data', label: 'Data Management' },
+    ];
+
+    container.innerHTML = `
+        <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:24px">Settings</h1>
+        <div class="settings-tab-bar">
+            ${tabs.map(t => `<button class="settings-tab${settingsActiveTab === t.id ? ' settings-tab-active' : ''}" data-tab="${t.id}">${t.label}</button>`).join('')}
+        </div>
+        <div id="settings-tab-content"></div>
+    `;
+
+    container.querySelectorAll('.settings-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            settingsActiveTab = btn.dataset.tab;
+            container.querySelectorAll('.settings-tab').forEach(b => b.classList.toggle('settings-tab-active', b.dataset.tab === settingsActiveTab));
+            renderActiveTab(container);
+        });
+    });
+
+    renderActiveTab(container);
+}
+
+function renderActiveTab(shell) {
+    const content = shell.querySelector('#settings-tab-content');
+    if (!content) return;
+    const d = settingsData;
+    switch (settingsActiveTab) {
+        case 'profile': renderTabProfile(content, d.fullProfile || d.profile || {}); break;
+        case 'work-history': renderTabWorkHistory(content, d.fullProfile || {}); break;
+        case 'job-search': renderTabJobSearch(content, d.config || {}, d.fullProfile || d.profile || {}, d.customQA || []); break;
+        case 'integrations': renderTabAI(content, d.aiSettings || {}, d.scraperKeys || {}); break;
+        case 'data': renderTabData(content); break;
     }
-    if (keys.adzuna) {
-        if (keys.adzuna.has_key) document.getElementById('scraper-key-adzuna').value = '****';
-    }
-    if (keys['adzuna-id']) {
-        if (keys['adzuna-id'].has_key) document.getElementById('scraper-key-adzuna-id').value = '****';
-    }
-    if (keys.jsearch) {
-        if (keys.jsearch.has_key) document.getElementById('scraper-key-jsearch').value = '****';
-    }
-    document.getElementById('save-scraper-keys-btn').addEventListener('click', async () => {
-        const payload = {
-            usajobs: {
-                api_key: document.getElementById('scraper-key-usajobs').value,
-                email: document.getElementById('scraper-email-usajobs').value,
-            },
-            'adzuna-id': {
-                api_key: document.getElementById('scraper-key-adzuna-id').value,
-                email: '',
-            },
-            adzuna: {
-                api_key: document.getElementById('scraper-key-adzuna').value,
-                email: '',
-            },
-            jsearch: {
-                api_key: document.getElementById('scraper-key-jsearch').value,
-                email: '',
-            },
+}
+
+function settingsField(label, id, value, type = 'text', opts = {}) {
+    const ph = opts.placeholder || '';
+    const extra = opts.extra || '';
+    return `<div>
+        <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">${label}</label>
+        <input type="${type}" class="search-input" id="${id}" value="${escapeHtml(value != null ? String(value) : '')}" placeholder="${escapeHtml(ph)}" style="width:100%" ${extra}>
+    </div>`;
+}
+
+function settingsSelect(label, id, value, options) {
+    return `<div>
+        <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">${label}</label>
+        <select class="filter-select" id="${id}" style="width:100%">
+            ${options.map(o => {
+                const val = typeof o === 'string' ? o : o.value;
+                const lbl = typeof o === 'string' ? o : o.label;
+                return `<option value="${escapeHtml(val)}" ${val === (value || '') ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+            }).join('')}
+        </select>
+    </div>`;
+}
+
+// === Tab 1: Profile ===
+function renderTabProfile(container, p) {
+    const mil = p.military || {};
+    const eeo = p.eeo || {};
+    const sameAddr = !p.perm_address_street1 && !p.perm_address_city;
+    const nameParts = (p.full_name || '').split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.length > 2 ? nameParts.slice(2).join(' ') : (nameParts[1] || '');
+
+    container.innerHTML = `
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Personal Information</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+                ${settingsField('First Name', 'pf-first', firstName)}
+                ${settingsField('Middle Name', 'pf-middle', p.middle_name)}
+                ${settingsField('Last Name', 'pf-last', lastName)}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+                ${settingsField('Preferred Name', 'pf-preferred', p.preferred_name)}
+                ${settingsField('Email', 'pf-email', p.email, 'email')}
+                ${settingsSelect('Pronouns', 'pf-pronouns', p.pronouns, [
+                    {value:'',label:'Select...'},{value:'he/him',label:'He/Him'},{value:'she/her',label:'She/Her'},
+                    {value:'they/them',label:'They/Them'},{value:'other',label:'Other'},
+                ])}
+            </div>
+            <div style="display:grid;grid-template-columns:auto 1fr auto 1fr;gap:12px;margin-bottom:12px">
+                ${settingsSelect('Code', 'pf-phone-cc', p.phone_country_code || '+1', [
+                    {value:'+1',label:'+1 (US/CA)'},{value:'+44',label:'+44 (UK)'},{value:'+61',label:'+61 (AU)'},
+                    {value:'+49',label:'+49 (DE)'},{value:'+33',label:'+33 (FR)'},{value:'+91',label:'+91 (IN)'},
+                    {value:'+81',label:'+81 (JP)'},{value:'+86',label:'+86 (CN)'},{value:'+55',label:'+55 (BR)'},
+                    {value:'+52',label:'+52 (MX)'},{value:'+82',label:'+82 (KR)'},
+                ])}
+                ${settingsField('Phone', 'pf-phone', p.phone, 'tel')}
+                ${settingsSelect('Phone Type', 'pf-phone-type', p.phone_type, [
+                    {value:'',label:'Select...'},{value:'mobile',label:'Mobile'},{value:'home',label:'Home'},{value:'work',label:'Work'},
+                ])}
+                ${settingsField('Additional Phone', 'pf-addl-phone', p.additional_phone, 'tel')}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                ${settingsField('Date of Birth', 'pf-dob', p.date_of_birth, 'date')}
+                ${settingsField('Location (for quick copy)', 'pf-location', p.location)}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Address</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                ${settingsField('Street Address 1', 'pf-addr1', p.address_street1)}
+                ${settingsField('Street Address 2', 'pf-addr2', p.address_street2)}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+                ${settingsField('City', 'pf-addr-city', p.address_city)}
+                ${settingsField('State', 'pf-addr-state', p.address_state)}
+                ${settingsField('ZIP', 'pf-addr-zip', p.address_zip)}
+                ${settingsField('Country', 'pf-addr-country', p.address_country_name || p.address_country_code)}
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.875rem;cursor:pointer;margin-bottom:12px">
+                <input type="checkbox" id="pf-same-addr" ${sameAddr ? 'checked' : ''}> Permanent address same as above
+            </label>
+            <div id="pf-perm-addr" style="${sameAddr ? 'display:none' : ''}">
+                <h3 style="font-size:0.9375rem;font-weight:600;margin-bottom:12px;color:var(--text-secondary)">Permanent Address</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                    ${settingsField('Street 1', 'pf-perm1', p.perm_address_street1)}
+                    ${settingsField('Street 2', 'pf-perm2', p.perm_address_street2)}
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+                    ${settingsField('City', 'pf-perm-city', p.perm_address_city)}
+                    ${settingsField('State', 'pf-perm-state', p.perm_address_state)}
+                    ${settingsField('ZIP', 'pf-perm-zip', p.perm_address_zip)}
+                    ${settingsField('Country', 'pf-perm-country', p.perm_address_country_name || p.perm_address_country_code)}
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Links</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                ${settingsField('LinkedIn', 'pf-linkedin', p.linkedin_url, 'url')}
+                ${settingsField('GitHub', 'pf-github', p.github_url, 'url')}
+                ${settingsField('Portfolio', 'pf-portfolio', p.portfolio_url, 'url')}
+                ${settingsField('Website', 'pf-website', p.website_url, 'url')}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Driver's License</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                ${settingsSelect('Have License?', 'pf-dl', p.drivers_license, [
+                    {value:'',label:'Select...'},{value:'yes',label:'Yes'},{value:'no',label:'No'},
+                ])}
+                ${settingsField('Class', 'pf-dl-class', p.drivers_license_class)}
+                ${settingsField('State', 'pf-dl-state', p.drivers_license_state)}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Work Authorization</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+                ${settingsField('Country of Citizenship', 'pf-citizen', p.country_of_citizenship)}
+                ${settingsSelect('Authorized to Work in US?', 'pf-auth-us', p.authorized_to_work_us, [
+                    {value:'',label:'Select...'},{value:'yes',label:'Yes'},{value:'no',label:'No'},
+                ])}
+                ${settingsSelect('Requires Sponsorship?', 'pf-sponsor', p.requires_sponsorship, [
+                    {value:'',label:'Select...'},{value:'yes',label:'Yes'},{value:'no',label:'No'},
+                ])}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                ${settingsSelect('Authorization Type', 'pf-auth-type', p.authorization_type, [
+                    {value:'',label:'Select...'},{value:'citizen',label:'US Citizen'},{value:'permanent_resident',label:'Permanent Resident'},
+                    {value:'h1b',label:'H-1B'},{value:'opt',label:'OPT'},{value:'ead',label:'EAD'},
+                    {value:'tn',label:'TN Visa'},{value:'other',label:'Other'},
+                ])}
+                ${settingsSelect('Security Clearance', 'pf-clearance', p.security_clearance, [
+                    {value:'',label:'None'},{value:'confidential',label:'Confidential'},{value:'secret',label:'Secret'},
+                    {value:'top_secret',label:'Top Secret'},{value:'ts_sci',label:'TS/SCI'},
+                ])}
+                ${settingsSelect('Clearance Status', 'pf-clear-status', p.clearance_status, [
+                    {value:'',label:'N/A'},{value:'active',label:'Active'},{value:'inactive',label:'Inactive'},{value:'expired',label:'Expired'},
+                ])}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Military Service</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+                ${settingsField('Branch', 'pf-mil-branch', mil.branch)}
+                ${settingsField('Rank', 'pf-mil-rank', mil.rank)}
+                ${settingsField('Specialty / MOS', 'pf-mil-spec', mil.specialty)}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                ${settingsField('Start Date', 'pf-mil-start', mil.start_date, 'date')}
+                ${settingsField('End Date', 'pf-mil-end', mil.end_date, 'date')}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:8px">Voluntary Self-Identification (EEO)</h2>
+            <p style="color:var(--text-secondary);font-size:0.8125rem;margin-bottom:16px">Optional. Used to pre-fill voluntary self-identification forms.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                ${settingsSelect('Gender', 'pf-eeo-gender', eeo.gender, [
+                    {value:'',label:'Decline to self-identify'},{value:'male',label:'Male'},{value:'female',label:'Female'},
+                    {value:'non_binary',label:'Non-binary'},{value:'other',label:'Other'},
+                ])}
+                ${settingsSelect('Race / Ethnicity', 'pf-eeo-race', eeo.race_ethnicity, [
+                    {value:'',label:'Decline to self-identify'},
+                    {value:'american_indian',label:'American Indian or Alaska Native'},
+                    {value:'asian',label:'Asian'},{value:'black',label:'Black or African American'},
+                    {value:'hispanic',label:'Hispanic or Latino'},{value:'native_hawaiian',label:'Native Hawaiian or Pacific Islander'},
+                    {value:'white',label:'White'},{value:'two_or_more',label:'Two or More Races'},
+                ])}
+                ${settingsSelect('Disability Status', 'pf-eeo-disability', eeo.disability_status, [
+                    {value:'',label:'Decline to self-identify'},
+                    {value:'yes',label:'Yes, I have a disability'},{value:'no',label:'No, I do not have a disability'},
+                ])}
+                ${settingsSelect('Veteran Status', 'pf-eeo-veteran', eeo.veteran_status, [
+                    {value:'',label:'Decline to self-identify'},
+                    {value:'not_veteran',label:'I am not a protected veteran'},
+                    {value:'protected_veteran',label:'I identify as a protected veteran'},
+                ])}
+                ${settingsSelect('Sexual Orientation', 'pf-eeo-orient', eeo.sexual_orientation, [
+                    {value:'',label:'Decline to self-identify'},
+                    {value:'heterosexual',label:'Heterosexual'},{value:'gay_lesbian',label:'Gay or Lesbian'},
+                    {value:'bisexual',label:'Bisexual'},{value:'other',label:'Other'},
+                ])}
+            </div>
+        </div>
+
+        <button class="btn btn-primary" id="save-profile-btn" style="margin-bottom:24px">Save Profile</button>
+    `;
+
+    document.getElementById('pf-same-addr')?.addEventListener('change', e => {
+        document.getElementById('pf-perm-addr').style.display = e.target.checked ? 'none' : '';
+    });
+
+    document.getElementById('save-profile-btn').addEventListener('click', async () => {
+        const first = document.getElementById('pf-first').value.trim();
+        const middle = document.getElementById('pf-middle').value.trim();
+        const last = document.getElementById('pf-last').value.trim();
+        const sameAddress = document.getElementById('pf-same-addr').checked;
+
+        const profileData = {
+            full_name: [first, middle, last].filter(Boolean).join(' '),
+            middle_name: middle,
+            preferred_name: document.getElementById('pf-preferred').value,
+            email: document.getElementById('pf-email').value,
+            pronouns: document.getElementById('pf-pronouns').value,
+            phone_country_code: document.getElementById('pf-phone-cc').value,
+            phone: document.getElementById('pf-phone').value,
+            phone_type: document.getElementById('pf-phone-type').value,
+            additional_phone: document.getElementById('pf-addl-phone').value,
+            date_of_birth: document.getElementById('pf-dob').value,
+            location: document.getElementById('pf-location').value,
+            address_street1: document.getElementById('pf-addr1').value,
+            address_street2: document.getElementById('pf-addr2').value,
+            address_city: document.getElementById('pf-addr-city').value,
+            address_state: document.getElementById('pf-addr-state').value,
+            address_zip: document.getElementById('pf-addr-zip').value,
+            address_country_name: document.getElementById('pf-addr-country').value,
+            perm_address_street1: sameAddress ? '' : document.getElementById('pf-perm1').value,
+            perm_address_street2: sameAddress ? '' : document.getElementById('pf-perm2').value,
+            perm_address_city: sameAddress ? '' : document.getElementById('pf-perm-city').value,
+            perm_address_state: sameAddress ? '' : document.getElementById('pf-perm-state').value,
+            perm_address_zip: sameAddress ? '' : document.getElementById('pf-perm-zip').value,
+            perm_address_country_name: sameAddress ? '' : document.getElementById('pf-perm-country').value,
+            linkedin_url: document.getElementById('pf-linkedin').value,
+            github_url: document.getElementById('pf-github').value,
+            portfolio_url: document.getElementById('pf-portfolio').value,
+            website_url: document.getElementById('pf-website').value,
+            drivers_license: document.getElementById('pf-dl').value,
+            drivers_license_class: document.getElementById('pf-dl-class').value,
+            drivers_license_state: document.getElementById('pf-dl-state').value,
+            country_of_citizenship: document.getElementById('pf-citizen').value,
+            authorized_to_work_us: document.getElementById('pf-auth-us').value,
+            requires_sponsorship: document.getElementById('pf-sponsor').value,
+            authorization_type: document.getElementById('pf-auth-type').value,
+            security_clearance: document.getElementById('pf-clearance').value,
+            clearance_status: document.getElementById('pf-clear-status').value,
+        };
+        const military = {
+            branch: document.getElementById('pf-mil-branch').value,
+            rank: document.getElementById('pf-mil-rank').value,
+            specialty: document.getElementById('pf-mil-spec').value,
+            start_date: document.getElementById('pf-mil-start').value,
+            end_date: document.getElementById('pf-mil-end').value,
+        };
+        const eeoData = {
+            gender: document.getElementById('pf-eeo-gender').value,
+            race_ethnicity: document.getElementById('pf-eeo-race').value,
+            disability_status: document.getElementById('pf-eeo-disability').value,
+            veteran_status: document.getElementById('pf-eeo-veteran').value,
+            sexual_orientation: document.getElementById('pf-eeo-orient').value,
         };
         try {
-            await api.request('POST', '/api/scraper-keys', payload);
-            showToast('Scraper keys saved', 'success');
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
+            await api.request('PUT', '/api/profile/full', { ...profileData, military, eeo: eeoData });
+            settingsData.fullProfile = { ...settingsData.fullProfile, ...profileData, military, eeo: eeoData };
+            settingsData.profile = { ...settingsData.profile, ...profileData };
+            showToast('Profile saved', 'success');
+        } catch (err) { showToast(err.message, 'error'); }
     });
 }
 
-function renderSettingsContent(container, config, aiSettings = {}, profile = {}) {
+// === Tab 2: Work History ===
+function renderTabWorkHistory(container, fp) {
+    const workHistory = fp.work_history || [];
+    const education = fp.education || [];
+    const certs = fp.certifications || [];
+    const skills = fp.skills || [];
+    const languages = fp.languages || [];
+    const references = fp.references || [];
+
+    function itemCard(item, type, line1, line2, extra) {
+        return `<div style="padding:12px 16px;background:var(--bg-surface-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;display:flex;justify-content:space-between;align-items:start">
+            <div style="min-width:0;flex:1">
+                <div style="font-weight:600;font-size:0.875rem">${escapeHtml(line1 || '(empty)')}</div>
+                ${line2 ? `<div style="color:var(--text-secondary);font-size:0.8125rem">${escapeHtml(line2)}</div>` : ''}
+                ${extra ? `<div style="color:var(--text-tertiary);font-size:0.75rem;margin-top:2px">${extra}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+                <button class="btn btn-ghost btn-sm wh-edit-btn" data-type="${type}" data-id="${item.id}">Edit</button>
+                <button class="btn btn-danger btn-sm wh-delete-btn" data-type="${type}" data-id="${item.id}">Delete</button>
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = `
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Work Experience</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="work-history">+ Add</button>
+            </div>
+            <div id="wh-work-history-list">${workHistory.length ? workHistory.map(w => {
+                const dates = [w.start_month ? `${w.start_month}/` : '', w.start_year || '', w.is_current ? ' - Present' : (w.end_year ? ` - ${w.end_month ? w.end_month + '/' : ''}${w.end_year}` : '')].join('');
+                return itemCard(w, 'work-history', w.job_title, w.company, [w.location_city, w.location_state].filter(Boolean).join(', ') + (dates ? ' | ' + dates : ''));
+            }).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No entries yet.</p>'}</div>
+            <div id="wh-work-history-form"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Education</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="education">+ Add</button>
+            </div>
+            <div id="wh-education-list">${education.length ? education.map(e => itemCard(e, 'education', e.school, [e.degree_type, e.field_of_study].filter(Boolean).join(' - '), e.grad_year ? `Graduated ${e.grad_year}` : '')).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No entries yet.</p>'}</div>
+            <div id="wh-education-form"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Certifications & Licenses</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="certifications">+ Add</button>
+            </div>
+            <div id="wh-certifications-list">${certs.length ? certs.map(c => itemCard(c, 'certifications', c.name, c.issuing_org, [c.cert_type, c.date_obtained].filter(Boolean).join(' | '))).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No entries yet.</p>'}</div>
+            <div id="wh-certifications-form"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Skills</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="skills">+ Add</button>
+            </div>
+            <div id="wh-skills-list">${skills.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${skills.map(s => `
+                <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-surface-secondary);border:1px solid var(--border);padding:4px 10px;border-radius:6px;font-size:0.875rem">
+                    ${escapeHtml(s.name)}${s.years_experience ? ` (${s.years_experience}yr)` : ''}${s.proficiency ? ` - ${s.proficiency}` : ''}
+                    <button class="btn btn-ghost btn-sm wh-delete-btn" data-type="skills" data-id="${s.id}" style="color:var(--danger);padding:0 2px;font-size:0.75rem;min-width:auto">x</button>
+                </span>
+            `).join('')}</div>` : '<p style="color:var(--text-tertiary);font-size:0.875rem">No skills added.</p>'}</div>
+            <div id="wh-skills-form"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Languages</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="languages">+ Add</button>
+            </div>
+            <div id="wh-languages-list">${languages.length ? languages.map(l => itemCard(l, 'languages', l.language, l.proficiency)).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No entries yet.</p>'}</div>
+            <div id="wh-languages-form"></div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">References</h2>
+                <button class="btn btn-primary btn-sm wh-add-btn" data-type="references">+ Add</button>
+            </div>
+            <div id="wh-references-list">${references.length ? references.map(r => itemCard(r, 'references', r.name, [r.title, r.company].filter(Boolean).join(' at '), [r.phone, r.email].filter(Boolean).join(' | '))).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No entries yet.</p>'}</div>
+            <div id="wh-references-form"></div>
+        </div>
+    `;
+
+    const formConfigs = {
+        'work-history': { endpoint: '/api/work-history', fields: [
+            {key:'job_title',label:'Job Title',type:'text'},{key:'company',label:'Company',type:'text'},
+            {key:'location_city',label:'City',type:'text'},{key:'location_state',label:'State',type:'text'},{key:'location_country',label:'Country',type:'text'},
+            {key:'start_month',label:'Start Month',type:'number',extra:'min="1" max="12"'},{key:'start_year',label:'Start Year',type:'number',extra:'min="1950" max="2030"'},
+            {key:'end_month',label:'End Month',type:'number',extra:'min="1" max="12"'},{key:'end_year',label:'End Year',type:'number',extra:'min="1950" max="2030"'},
+            {key:'is_current',label:'Current?',type:'checkbox'},
+            {key:'description',label:'Description',type:'textarea'},
+            {key:'salary_at_position',label:'Salary',type:'text'},
+        ], listKey: 'work_history'},
+        'education': { endpoint: '/api/education', fields: [
+            {key:'school',label:'School',type:'text'},{key:'degree_type',label:'Degree',type:'select',options:[
+                {value:'',label:'Select...'},{value:'high_school',label:'High School'},{value:'associates',label:'Associates'},
+                {value:'bachelors',label:'Bachelors'},{value:'masters',label:'Masters'},{value:'mba',label:'MBA'},
+                {value:'phd',label:'PhD'},{value:'other',label:'Other'},
+            ]},
+            {key:'field_of_study',label:'Field of Study',type:'text'},{key:'minor',label:'Minor',type:'text'},
+            {key:'start_year',label:'Start Year',type:'number'},{key:'grad_year',label:'Grad Year',type:'number'},
+            {key:'gpa',label:'GPA',type:'text'},{key:'honors',label:'Honors',type:'text'},
+        ], listKey: 'education'},
+        'certifications': { endpoint: '/api/certifications', fields: [
+            {key:'name',label:'Name',type:'text'},{key:'issuing_org',label:'Issuing Org',type:'text'},
+            {key:'cert_type',label:'Type',type:'select',options:[{value:'certification',label:'Certification'},{value:'license',label:'License'}]},
+            {key:'license_number',label:'License #',type:'text'},{key:'state',label:'State',type:'text'},
+            {key:'date_obtained',label:'Date Obtained',type:'date'},{key:'expiration_date',label:'Expiration',type:'date'},
+        ], listKey: 'certifications'},
+        'skills': { endpoint: '/api/skills', fields: [
+            {key:'name',label:'Skill',type:'text'},{key:'years_experience',label:'Years',type:'number'},
+            {key:'proficiency',label:'Proficiency',type:'select',options:[
+                {value:'',label:'Select...'},{value:'beginner',label:'Beginner'},{value:'intermediate',label:'Intermediate'},
+                {value:'advanced',label:'Advanced'},{value:'expert',label:'Expert'},
+            ]},
+        ], listKey: 'skills'},
+        'languages': { endpoint: '/api/languages', fields: [
+            {key:'language',label:'Language',type:'text'},
+            {key:'proficiency',label:'Proficiency',type:'select',options:[
+                {value:'conversational',label:'Conversational'},{value:'professional',label:'Professional'},
+                {value:'native',label:'Native / Bilingual'},{value:'basic',label:'Basic'},
+            ]},
+        ], listKey: 'languages'},
+        'references': { endpoint: '/api/references', fields: [
+            {key:'name',label:'Name',type:'text'},{key:'title',label:'Title',type:'text'},
+            {key:'company',label:'Company',type:'text'},{key:'phone',label:'Phone',type:'tel'},
+            {key:'email',label:'Email',type:'email'},{key:'relationship',label:'Relationship',type:'text'},
+            {key:'years_known',label:'Years Known',type:'number'},
+        ], listKey: 'references'},
+    };
+
+    function showForm(type, existingItem) {
+        const cfg = formConfigs[type];
+        const formEl = document.getElementById(`wh-${type}-form`);
+        if (!formEl) return;
+        const data = existingItem || {};
+        const isEdit = !!data.id;
+        const gridCols = cfg.fields.length <= 3 ? `repeat(${cfg.fields.length}, 1fr)` : 'repeat(auto-fill, minmax(180px, 1fr))';
+
+        formEl.innerHTML = `
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-top:12px;background:var(--bg-surface-secondary)">
+                <div style="display:grid;grid-template-columns:${gridCols};gap:12px;margin-bottom:12px">
+                    ${cfg.fields.map(f => {
+                        const id = `wh-f-${type}-${f.key}`;
+                        if (f.type === 'textarea') return `<div style="grid-column:1/-1"><label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">${f.label}</label><textarea class="textarea-styled textarea-notes" id="${id}" style="width:100%;min-height:80px">${escapeHtml(String(data[f.key] || ''))}</textarea></div>`;
+                        if (f.type === 'checkbox') return `<div style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:8px"><input type="checkbox" id="${id}" ${data[f.key] ? 'checked' : ''}><label style="font-size:0.8125rem;font-weight:600;color:var(--text-tertiary)">${f.label}</label></div>`;
+                        if (f.type === 'select') return settingsSelect(f.label, id, String(data[f.key] || ''), f.options);
+                        return settingsField(f.label, id, data[f.key], f.type, { extra: f.extra || '' });
+                    }).join('')}
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-sm" id="wh-save-${type}">${isEdit ? 'Update' : 'Save'}</button>
+                    <button class="btn btn-secondary btn-sm" id="wh-cancel-${type}">Cancel</button>
+                </div>
+            </div>`;
+
+        document.getElementById(`wh-save-${type}`).addEventListener('click', async () => {
+            const entry = {};
+            if (data.id) entry.id = data.id;
+            cfg.fields.forEach(f => {
+                const input = document.getElementById(`wh-f-${type}-${f.key}`);
+                if (!input) return;
+                if (f.type === 'checkbox') entry[f.key] = input.checked ? 1 : 0;
+                else if (f.type === 'number') entry[f.key] = input.value ? parseInt(input.value) : null;
+                else entry[f.key] = input.value;
+            });
+            try {
+                await api.request('POST', cfg.endpoint, entry);
+                showToast(isEdit ? 'Updated' : 'Added', 'success');
+                settingsData.fullProfile = await api.request('GET', '/api/profile/full');
+                renderTabWorkHistory(container, settingsData.fullProfile);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+        document.getElementById(`wh-cancel-${type}`).addEventListener('click', () => { formEl.innerHTML = ''; });
+    }
+
+    // Add buttons
+    container.querySelectorAll('.wh-add-btn').forEach(btn => {
+        btn.addEventListener('click', () => showForm(btn.dataset.type, null));
+    });
+
+    // Edit buttons
+    container.querySelectorAll('.wh-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.type;
+            const id = parseInt(btn.dataset.id);
+            const cfg = formConfigs[type];
+            const items = fp[cfg.listKey] || [];
+            const item = items.find(i => i.id === id);
+            if (item) showForm(type, item);
+        });
+    });
+
+    // Delete buttons
+    container.querySelectorAll('.wh-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const type = btn.dataset.type;
+            const id = btn.dataset.id;
+            if (!confirm('Delete this entry?')) return;
+            try {
+                await api.request('DELETE', `/api/${type}/${id}`);
+                settingsData.fullProfile = await api.request('GET', '/api/profile/full');
+                renderTabWorkHistory(container, settingsData.fullProfile);
+                showToast('Deleted', 'info');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+    });
+}
+
+// === Tab 3: Job Search ===
+function renderTabJobSearch(container, config, profile, customQA) {
     const termsValue = (config.search_terms || []).join('\n');
     const excludeTermsValue = (config.exclude_terms || []).join('\n');
     const hasResume = config.resume_text && config.resume_text.length > 0;
@@ -1213,125 +1714,7 @@ function renderSettingsContent(container, config, aiSettings = {}, profile = {})
     const hasAts = atsScore > 0;
     const hasAnalysis = jobTitles.length > 0 || summary;
 
-    const aiProvider = aiSettings.provider || '';
-    const aiKey = aiSettings.api_key || '';
-    const aiModel = aiSettings.model || '';
-    const aiBaseUrl = aiSettings.base_url || '';
-    const hasKey = aiSettings.has_key || false;
-
     container.innerHTML = `
-        <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:24px">Settings</h1>
-
-        <div class="card" style="padding:24px;margin-bottom:24px">
-            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Your Profile</h2>
-            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
-                Store common application form fields for quick copy-paste during job applications.
-            </p>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Full Name</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="text" class="search-input" id="profile-name" value="${escapeHtml(profile.full_name || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-name" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Email</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="email" class="search-input" id="profile-email" value="${escapeHtml(profile.email || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-email" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Phone</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="text" class="search-input" id="profile-phone" value="${escapeHtml(profile.phone || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-phone" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Location</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="text" class="search-input" id="profile-location" value="${escapeHtml(profile.location || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-location" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">LinkedIn URL</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="url" class="search-input" id="profile-linkedin" value="${escapeHtml(profile.linkedin_url || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-linkedin" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">GitHub URL</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="url" class="search-input" id="profile-github" value="${escapeHtml(profile.github_url || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-github" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Portfolio URL</label>
-                    <div style="display:flex;gap:4px">
-                        <input type="url" class="search-input" id="profile-portfolio" value="${escapeHtml(profile.portfolio_url || '')}" style="flex:1">
-                        <button class="btn btn-secondary btn-sm profile-copy-btn" data-field="profile-portfolio" title="Copy" style="padding:4px 8px;min-width:auto">&#128203;</button>
-                    </div>
-                </div>
-            </div>
-            <button class="btn btn-primary" id="save-profile-btn">Save Profile</button>
-        </div>
-
-        <div class="card" style="padding:24px;margin-bottom:24px">
-            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">AI Provider</h2>
-            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
-                Configure which AI backend to use for job scoring, resume analysis, and application tailoring.
-            </p>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Provider</label>
-                    <select class="filter-select" id="ai-provider" style="width:100%">
-                        <option value="anthropic" ${aiProvider === 'anthropic' ? 'selected' : ''}>Anthropic (Claude)</option>
-                        <option value="openai" ${aiProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
-                        <option value="google" ${aiProvider === 'google' ? 'selected' : ''}>Google (Gemini)</option>
-                        <option value="openrouter" ${aiProvider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
-                        <option value="ollama" ${aiProvider === 'ollama' ? 'selected' : ''}>Ollama (Local)</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Model</label>
-                    <div id="ai-model-container">
-                        <input type="text" class="search-input" id="ai-model" placeholder="${
-                            aiProvider === 'openai' ? 'e.g. gpt-4o' :
-                            aiProvider === 'google' ? 'e.g. gemini-2.0-flash' :
-                            aiProvider === 'openrouter' ? 'e.g. anthropic/claude-sonnet-4' :
-                            'e.g. claude-sonnet-4-20250514'
-                        }" value="${escapeHtml(aiModel)}" style="width:100%;${aiProvider === 'ollama' ? 'display:none' : ''}">
-                        <div id="ai-model-ollama" style="${aiProvider === 'ollama' ? '' : 'display:none'}">
-                            <div style="display:flex;gap:8px;align-items:center">
-                                <select class="filter-select" id="ai-model-select" style="flex:1">
-                                    ${aiModel ? `<option value="${escapeHtml(aiModel)}" selected>${escapeHtml(aiModel)}</option>` : '<option value="">Select a model...</option>'}
-                                </select>
-                                <button class="btn btn-secondary btn-sm" id="refresh-models-btn" title="Refresh models" style="white-space:nowrap">Refresh</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="ai-key-row" style="margin-bottom:12px;${aiProvider === 'ollama' ? 'display:none' : ''}">
-                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">API Key</label>
-                <input type="password" class="search-input" id="ai-api-key" placeholder="${hasKey ? 'Key configured (leave blank to keep)' : 'Enter API key'}" value="${escapeHtml(aiKey)}" style="width:100%">
-            </div>
-            <div id="ai-url-row" style="margin-bottom:16px;${aiProvider === 'ollama' ? '' : 'display:none'}">
-                <label id="ai-url-label" style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Ollama URL</label>
-                <input type="text" class="search-input" id="ai-base-url" placeholder="http://localhost:11434" value="${escapeHtml(aiBaseUrl)}" style="width:100%">
-            </div>
-            <div style="display:flex;gap:12px">
-                <button class="btn btn-primary" id="save-ai-btn">Save AI Settings</button>
-                <button class="btn btn-secondary" id="test-ai-btn">Test Connection</button>
-            </div>
-            <div id="ai-test-result" style="margin-top:12px"></div>
-        </div>
-
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Resume</h2>
             <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
@@ -1350,62 +1733,27 @@ function renderSettingsContent(container, config, aiSettings = {}, profile = {})
                 <h2 style="font-size:1.125rem;font-weight:600;margin:0">ATS Compatibility</h2>
                 <span class="score-badge ${atsScore >= 80 ? 'score-badge-green' : atsScore >= 60 ? 'score-badge-amber' : 'score-badge-gray'}" style="font-size:1.25rem;padding:8px 16px">${atsScore}/100</span>
             </div>
-            ${atsScore < 60 ? `<div style="background:var(--danger-bg, rgba(239,68,68,0.1));color:var(--danger, #ef4444);padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:0.875rem">Your resume has significant ATS compatibility issues. Many applicant tracking systems may not parse it correctly.</div>` : ''}
-            ${atsScore >= 60 && atsScore < 80 ? `<div style="background:rgba(245,158,11,0.1);color:#d97706;padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600;font-size:0.875rem">Your resume is moderately ATS-friendly but has room for improvement.</div>` : ''}
-            ${atsIssues.length ? `
-            <div style="margin-bottom:12px">
-                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Issues Found</span>
-                <ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">
-                    ${atsIssues.map(i => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(i)}</li>`).join('')}
-                </ul>
-            </div>
-            ` : ''}
-            ${atsTips.length ? `
-            <div>
-                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Suggestions</span>
-                <ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">
-                    ${atsTips.map(t => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(t)}</li>`).join('')}
-                </ul>
-            </div>
-            ` : ''}
-        </div>
-        ` : ''}
+            ${atsIssues.length ? `<div style="margin-bottom:12px"><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Issues Found</span><ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">${atsIssues.map(i => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(i)}</li>`).join('')}</ul></div>` : ''}
+            ${atsTips.length ? `<div><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Suggestions</span><ul style="margin-top:8px;padding-left:20px;display:flex;flex-direction:column;gap:4px">${atsTips.map(t => `<li style="font-size:0.875rem;color:var(--text-secondary)">${escapeHtml(t)}</li>`).join('')}</ul></div>` : ''}
+        </div>` : ''}
 
         ${hasAnalysis ? `
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Resume Analysis</h2>
             ${summary ? `<p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.9375rem;line-height:1.6">${escapeHtml(summary)}</p>` : ''}
             ${seniority ? `<div style="margin-bottom:16px"><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Seniority Level</span><div style="margin-top:4px;font-weight:600">${escapeHtml(seniority)}</div></div>` : ''}
-            ${keySkills.length ? `
-            <div style="margin-bottom:16px">
-                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Key Skills</span>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
-                    ${keySkills.map(s => `<span style="background:var(--bg-tertiary);color:var(--text-primary);padding:4px 10px;border-radius:6px;font-size:0.8125rem">${escapeHtml(s)}</span>`).join('')}
-                </div>
-            </div>
-            ` : ''}
-            ${jobTitles.length ? `
-            <div>
-                <span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Best-Fit Job Titles</span>
-                <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-                    ${jobTitles.map(jt => {
-                        const title = typeof jt === 'string' ? jt : jt.title;
-                        const why = typeof jt === 'object' && jt.why ? jt.why : '';
-                        return `<div style="padding:10px 14px;border-radius:8px;background:var(--bg-tertiary)">
-                            <div style="font-weight:600;font-size:0.9375rem">${escapeHtml(title)}</div>
-                            ${why ? `<div style="color:var(--text-secondary);font-size:0.8125rem;margin-top:2px">${escapeHtml(why)}</div>` : ''}
-                        </div>`;
-                    }).join('')}
-                </div>
-            </div>
-            ` : ''}
-        </div>
-        ` : ''}
+            ${keySkills.length ? `<div style="margin-bottom:16px"><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Key Skills</span><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${keySkills.map(s => `<span style="background:var(--bg-tertiary);color:var(--text-primary);padding:4px 10px;border-radius:6px;font-size:0.8125rem">${escapeHtml(s)}</span>`).join('')}</div></div>` : ''}
+            ${jobTitles.length ? `<div><span style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-tertiary)">Best-Fit Job Titles</span><div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">${jobTitles.map(jt => {
+                const title = typeof jt === 'string' ? jt : jt.title;
+                const why = typeof jt === 'object' && jt.why ? jt.why : '';
+                return `<div style="padding:10px 14px;border-radius:8px;background:var(--bg-tertiary)"><div style="font-weight:600;font-size:0.9375rem">${escapeHtml(title)}</div>${why ? `<div style="color:var(--text-secondary);font-size:0.8125rem;margin-top:2px">${escapeHtml(why)}</div>` : ''}</div>`;
+            }).join('')}</div></div>` : ''}
+        </div>` : ''}
 
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Search Terms</h2>
             <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
-                These terms are used by scrapers to find relevant jobs. One per line. Edit freely — they are saved independently of the resume.
+                These terms are used by scrapers to find relevant jobs. One per line.
             </p>
             <textarea class="textarea-styled" id="search-terms-textarea" rows="12" placeholder="e.g. senior devops engineer remote&#10;SRE remote&#10;platform engineer remote">${escapeHtml(termsValue)}</textarea>
             <div style="display:flex;gap:12px;margin-top:12px">
@@ -1416,15 +1764,242 @@ function renderSettingsContent(container, config, aiSettings = {}, profile = {})
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Exclude Terms</h2>
             <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
-                Jobs matching any of these terms (in title or description) will be hidden from results. One per line.
+                Jobs matching any of these terms will be hidden. One per line.
             </p>
-            <textarea class="textarea-styled" id="exclude-terms-textarea" rows="6" placeholder="e.g. manager&#10;director&#10;management&#10;VP&#10;vice president">${escapeHtml(excludeTermsValue)}</textarea>
+            <textarea class="textarea-styled" id="exclude-terms-textarea" rows="6" placeholder="e.g. manager&#10;director&#10;VP">${escapeHtml(excludeTermsValue)}</textarea>
             <div style="display:flex;gap:12px;margin-top:12px">
                 <button class="btn btn-primary" id="save-exclude-btn">Save Exclude Terms</button>
             </div>
         </div>
 
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Salary Preferences</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                ${settingsField('Minimum Salary', 'js-sal-min', profile.desired_salary_min, 'number')}
+                ${settingsField('Maximum Salary', 'js-sal-max', profile.desired_salary_max, 'number')}
+                ${settingsSelect('Period', 'js-sal-period', profile.salary_period, [
+                    {value:'',label:'Select...'},{value:'annual',label:'Annual'},{value:'hourly',label:'Hourly'},
+                ])}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Availability</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                ${settingsField('Available From', 'js-avail-date', profile.availability_date, 'date')}
+                ${settingsSelect('Notice Period', 'js-notice', profile.notice_period, [
+                    {value:'',label:'Select...'},{value:'immediate',label:'Immediate'},
+                    {value:'2_weeks',label:'2 Weeks'},{value:'1_month',label:'1 Month'},
+                    {value:'2_months',label:'2 Months'},{value:'3_months',label:'3 Months'},
+                ])}
+                ${settingsSelect('Willing to Relocate', 'js-relocate', profile.willing_to_relocate, [
+                    {value:'',label:'Select...'},{value:'yes',label:'Yes'},{value:'no',label:'No'},{value:'depends',label:'Depends'},
+                ])}
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Other Defaults</h2>
+            ${settingsSelect('How did you hear about us? (default)', 'js-how-heard', profile.how_heard_default, [
+                {value:'',label:'Select...'},{value:'job_board',label:'Job Board'},{value:'linkedin',label:'LinkedIn'},
+                {value:'referral',label:'Referral'},{value:'company_website',label:'Company Website'},
+                {value:'recruiter',label:'Recruiter'},{value:'other',label:'Other'},
+            ])}
+            <div style="margin-top:12px">
+                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Cover Letter Template</label>
+                <textarea class="textarea-styled textarea-notes" id="js-cover-tpl" rows="6" placeholder="Dear Hiring Manager,&#10;&#10;I am writing to express my interest...">${escapeHtml(profile.cover_letter_template || '')}</textarea>
+            </div>
+            <button class="btn btn-primary" id="save-js-prefs-btn" style="margin-top:12px">Save Preferences</button>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+                <h2 style="font-size:1.125rem;font-weight:600;margin:0">Custom Q&A Bank</h2>
+                <button class="btn btn-primary btn-sm" id="qa-add-btn">+ Add</button>
+            </div>
+            <div id="qa-items">${customQA.length ? customQA.map(q => `
+                <div style="padding:12px 16px;background:var(--bg-surface-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:0.8125rem;font-weight:600;color:var(--text-tertiary)">Q: ${escapeHtml(q.question_pattern)}</div>
+                            <div style="font-size:0.875rem;color:var(--text-secondary);margin-top:2px">${escapeHtml((q.answer || '').substring(0, 150))}${(q.answer || '').length > 150 ? '...' : ''}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-shrink:0">
+                            <button class="btn btn-ghost btn-sm qa-edit-btn" data-id="${q.id}">Edit</button>
+                            <button class="btn btn-danger btn-sm qa-del-btn" data-id="${q.id}">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('') : '<p style="color:var(--text-tertiary);font-size:0.875rem">No saved Q&A pairs yet.</p>'}</div>
+            <div id="qa-form-area"></div>
+        </div>
+
         ${config.updated_at ? `<p style="color:var(--text-tertiary);font-size:0.8125rem;margin-bottom:24px">Last updated: ${formatDate(config.updated_at)}</p>` : ''}
+    `;
+
+    document.getElementById('upload-resume-btn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('resume-file');
+        if (!fileInput.files.length) { showToast('Select a resume file first', 'error'); return; }
+        const btn = document.getElementById('upload-resume-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+        try {
+            const result = await api.uploadResume(fileInput.files[0]);
+            showToast(`Resume analyzed! ${result.search_terms.length} search terms extracted.`, 'success');
+            settingsData.config = await api.getSearchConfig();
+            renderTabJobSearch(container, settingsData.config, profile, customQA);
+        } catch (err) { showToast(err.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Upload & Analyze'; }
+    });
+
+    document.getElementById('save-terms-btn').addEventListener('click', async () => {
+        const terms = document.getElementById('search-terms-textarea').value.split('\n').map(t => t.trim()).filter(Boolean);
+        try {
+            await api.updateSearchTerms(terms);
+            showToast(`Saved ${terms.length} search terms`, 'success');
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    document.getElementById('save-exclude-btn').addEventListener('click', async () => {
+        const terms = document.getElementById('exclude-terms-textarea').value.split('\n').map(t => t.trim()).filter(Boolean);
+        try {
+            await api.request('POST', '/api/search-config/exclude-terms', { exclude_terms: terms });
+            showToast(`Saved ${terms.length} exclude terms`, 'success');
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    // Save job search preferences
+    document.getElementById('save-js-prefs-btn').addEventListener('click', async () => {
+        const prefs = {
+            desired_salary_min: document.getElementById('js-sal-min').value ? parseInt(document.getElementById('js-sal-min').value) : null,
+            desired_salary_max: document.getElementById('js-sal-max').value ? parseInt(document.getElementById('js-sal-max').value) : null,
+            salary_period: document.getElementById('js-sal-period').value,
+            availability_date: document.getElementById('js-avail-date').value,
+            notice_period: document.getElementById('js-notice').value,
+            willing_to_relocate: document.getElementById('js-relocate').value,
+            how_heard_default: document.getElementById('js-how-heard').value,
+            cover_letter_template: document.getElementById('js-cover-tpl').value,
+        };
+        try {
+            await api.request('POST', '/api/profile', prefs);
+            Object.assign(settingsData.fullProfile || {}, prefs);
+            Object.assign(settingsData.profile || {}, prefs);
+            showToast('Preferences saved', 'success');
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    // Q&A handlers
+    function showQAForm(existing) {
+        const area = document.getElementById('qa-form-area');
+        area.innerHTML = `
+            <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-top:12px;background:var(--bg-surface-secondary)">
+                <div style="margin-bottom:12px">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Question Pattern</label>
+                    <input type="text" class="search-input" id="qa-q" value="${escapeHtml(existing?.question_pattern || '')}" placeholder="e.g. Why do you want to work here?" style="width:100%">
+                </div>
+                <div style="margin-bottom:12px">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Category</label>
+                    <input type="text" class="search-input" id="qa-cat" value="${escapeHtml(existing?.category || '')}" placeholder="e.g. motivation, experience" style="width:100%">
+                </div>
+                <div style="margin-bottom:12px">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Answer</label>
+                    <textarea class="textarea-styled textarea-notes" id="qa-ans" rows="4">${escapeHtml(existing?.answer || '')}</textarea>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary btn-sm" id="qa-save-btn">Save</button>
+                    <button class="btn btn-secondary btn-sm" id="qa-cancel-btn">Cancel</button>
+                </div>
+            </div>`;
+        document.getElementById('qa-save-btn').addEventListener('click', async () => {
+            const entry = { question_pattern: document.getElementById('qa-q').value, category: document.getElementById('qa-cat').value, answer: document.getElementById('qa-ans').value };
+            if (existing?.id) entry.id = existing.id;
+            try {
+                await api.request('POST', '/api/custom-qa', entry);
+                showToast('Q&A saved', 'success');
+                const res = await api.request('GET', '/api/custom-qa');
+                settingsData.customQA = res.items || [];
+                renderTabJobSearch(container, settingsData.config, profile, settingsData.customQA);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+        document.getElementById('qa-cancel-btn').addEventListener('click', () => { area.innerHTML = ''; });
+    }
+
+    document.getElementById('qa-add-btn').addEventListener('click', () => showQAForm(null));
+    container.querySelectorAll('.qa-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const item = customQA.find(q => q.id === parseInt(btn.dataset.id));
+            if (item) showQAForm(item);
+        });
+    });
+    container.querySelectorAll('.qa-del-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Delete this Q&A?')) return;
+            try {
+                await api.request('DELETE', `/api/custom-qa/${btn.dataset.id}`);
+                showToast('Deleted', 'info');
+                const res = await api.request('GET', '/api/custom-qa');
+                settingsData.customQA = res.items || [];
+                renderTabJobSearch(container, settingsData.config, profile, settingsData.customQA);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+    });
+}
+
+// === Tab 4: AI & Integrations ===
+function renderTabAI(container, aiSettings, scraperKeys) {
+    const aiProvider = aiSettings.provider || '';
+    const aiKey = aiSettings.api_key || '';
+    const aiModel = aiSettings.model || '';
+    const aiBaseUrl = aiSettings.base_url || '';
+    const hasKey = aiSettings.has_key || false;
+    const keys = scraperKeys || {};
+
+    container.innerHTML = `
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">AI Provider</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                Configure which AI backend to use for job scoring, resume analysis, and application autofill.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Provider</label>
+                    <select class="filter-select" id="ai-provider" style="width:100%">
+                        <option value="anthropic" ${aiProvider === 'anthropic' ? 'selected' : ''}>Anthropic (Claude)</option>
+                        <option value="openai" ${aiProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
+                        <option value="google" ${aiProvider === 'google' ? 'selected' : ''}>Google (Gemini)</option>
+                        <option value="openrouter" ${aiProvider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+                        <option value="ollama" ${aiProvider === 'ollama' ? 'selected' : ''}>Ollama (Local)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Model</label>
+                    <div id="ai-model-container">
+                        <input type="text" class="search-input" id="ai-model" placeholder="${aiProvider === 'openai' ? 'e.g. gpt-4o' : aiProvider === 'google' ? 'e.g. gemini-2.0-flash' : 'e.g. claude-sonnet-4-20250514'}" value="${escapeHtml(aiModel)}" style="width:100%;${aiProvider === 'ollama' ? 'display:none' : ''}">
+                        <div id="ai-model-ollama" style="${aiProvider === 'ollama' ? '' : 'display:none'}">
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <select class="filter-select" id="ai-model-select" style="flex:1">
+                                    ${aiModel ? `<option value="${escapeHtml(aiModel)}" selected>${escapeHtml(aiModel)}</option>` : '<option value="">Select a model...</option>'}
+                                </select>
+                                <button class="btn btn-secondary btn-sm" id="refresh-models-btn" style="white-space:nowrap">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="ai-key-row" style="margin-bottom:12px;${aiProvider === 'ollama' ? 'display:none' : ''}">
+                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">API Key</label>
+                <input type="password" class="search-input" id="ai-api-key" placeholder="${hasKey ? 'Key configured (leave blank to keep)' : 'Enter API key'}" value="${escapeHtml(aiKey)}" style="width:100%">
+            </div>
+            <div id="ai-url-row" style="margin-bottom:16px;${aiProvider === 'ollama' ? '' : 'display:none'}">
+                <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Ollama URL</label>
+                <input type="text" class="search-input" id="ai-base-url" placeholder="http://localhost:11434" value="${escapeHtml(aiBaseUrl)}" style="width:100%">
+            </div>
+            <div style="display:flex;gap:12px">
+                <button class="btn btn-primary" id="save-ai-btn">Save AI Settings</button>
+                <button class="btn btn-secondary" id="test-ai-btn">Test Connection</button>
+            </div>
+            <div id="ai-test-result" style="margin-top:12px"></div>
+        </div>
 
         <div class="card" style="padding:24px;margin-bottom:24px">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:8px">Scraper API Keys</h2>
@@ -1433,32 +2008,126 @@ function renderSettingsContent(container, config, aiSettings = {}, profile = {})
             </p>
             <div style="display:flex;flex-direction:column;gap:16px">
                 <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">
-                        USAJobs API Key
-                        <a href="https://developer.usajobs.gov/APIRequest/Index" target="_blank" style="font-weight:400;color:var(--accent)">(get key)</a>
-                    </label>
-                    <input type="password" class="search-input" id="scraper-key-usajobs" placeholder="API key" style="margin-bottom:4px">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">USAJobs API Key</label>
+                    <input type="password" class="search-input" id="scraper-key-usajobs" placeholder="API key" value="${keys.usajobs?.has_key ? '****' : ''}" style="margin-bottom:4px">
                     <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px;margin-top:4px">USAJobs Email</label>
-                    <input type="email" class="search-input" id="scraper-email-usajobs" placeholder="Email used when registering">
+                    <input type="email" class="search-input" id="scraper-email-usajobs" placeholder="Email used when registering" value="${escapeHtml(keys.usajobs?.email || '')}">
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">
-                        Adzuna App ID
-                        <a href="https://developer.adzuna.com" target="_blank" style="font-weight:400;color:var(--accent)">(get key)</a>
-                    </label>
-                    <input type="password" class="search-input" id="scraper-key-adzuna-id" placeholder="App ID" style="margin-bottom:4px">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">Adzuna App ID</label>
+                    <input type="password" class="search-input" id="scraper-key-adzuna-id" placeholder="App ID" value="${keys['adzuna-id']?.has_key ? '****' : ''}" style="margin-bottom:4px">
                     <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px;margin-top:4px">Adzuna App Key</label>
-                    <input type="password" class="search-input" id="scraper-key-adzuna" placeholder="App key">
+                    <input type="password" class="search-input" id="scraper-key-adzuna" placeholder="App key" value="${keys.adzuna?.has_key ? '****' : ''}">
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">
-                        JSearch (RapidAPI) Key
-                        <a href="https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch" target="_blank" style="font-weight:400;color:var(--accent)">(get key)</a>
-                    </label>
-                    <input type="password" class="search-input" id="scraper-key-jsearch" placeholder="RapidAPI key">
+                    <label style="display:block;font-size:0.8125rem;font-weight:600;color:var(--text-tertiary);margin-bottom:4px">JSearch (RapidAPI) Key</label>
+                    <input type="password" class="search-input" id="scraper-key-jsearch" placeholder="RapidAPI key" value="${keys.jsearch?.has_key ? '****' : ''}">
                 </div>
             </div>
             <button class="btn btn-primary" id="save-scraper-keys-btn" style="margin-top:16px">Save Scraper Keys</button>
+        </div>
+    `;
+
+    // AI provider toggle
+    const modelPlaceholders = { anthropic: 'e.g. claude-sonnet-4-20250514', openai: 'e.g. gpt-4o', google: 'e.g. gemini-2.0-flash', openrouter: 'e.g. anthropic/claude-sonnet-4', ollama: '' };
+    document.getElementById('ai-provider').addEventListener('change', (e) => {
+        const provider = e.target.value;
+        const isOllama = provider === 'ollama';
+        document.getElementById('ai-key-row').style.display = isOllama ? 'none' : '';
+        document.getElementById('ai-url-row').style.display = isOllama ? '' : 'none';
+        document.getElementById('ai-model').style.display = isOllama ? 'none' : '';
+        document.getElementById('ai-model').placeholder = modelPlaceholders[provider] || '';
+        document.getElementById('ai-model-ollama').style.display = isOllama ? '' : 'none';
+        if (isOllama) fetchOllamaModels();
+    });
+
+    async function fetchOllamaModels() {
+        const select = document.getElementById('ai-model-select');
+        const currentVal = select.value;
+        const btn = document.getElementById('refresh-models-btn');
+        btn.disabled = true; btn.textContent = '...';
+        try {
+            const baseUrl = document.getElementById('ai-base-url').value || 'http://localhost:11434';
+            const result = await api.getOllamaModels(baseUrl);
+            if (result.ok && result.models.length > 0) {
+                select.innerHTML = result.models.map(m => `<option value="${escapeHtml(m)}" ${m === currentVal ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
+                if (!currentVal) select.value = result.models[0];
+            } else if (!result.ok) {
+                select.innerHTML = `<option value="">Failed to connect</option>`;
+            } else {
+                select.innerHTML = `<option value="">No models found</option>`;
+            }
+        } catch { select.innerHTML = `<option value="">Error loading models</option>`; }
+        finally { btn.disabled = false; btn.textContent = 'Refresh'; }
+    }
+
+    document.getElementById('refresh-models-btn').addEventListener('click', fetchOllamaModels);
+    if (document.getElementById('ai-provider').value === 'ollama') fetchOllamaModels();
+
+    function getAIFormValues() {
+        const provider = document.getElementById('ai-provider').value;
+        const model = provider === 'ollama' ? document.getElementById('ai-model-select').value : document.getElementById('ai-model').value;
+        return { provider, api_key: document.getElementById('ai-api-key').value, model, base_url: document.getElementById('ai-base-url').value };
+    }
+
+    document.getElementById('save-ai-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('save-ai-btn');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...';
+        try { await api.updateAISettings(getAIFormValues()); showToast('AI settings saved', 'success'); }
+        catch (err) { showToast(err.message, 'error'); }
+        finally { btn.disabled = false; btn.textContent = 'Save AI Settings'; }
+    });
+
+    document.getElementById('test-ai-btn').addEventListener('click', async () => {
+        const btn = document.getElementById('test-ai-btn');
+        const resultDiv = document.getElementById('ai-test-result');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Testing...'; resultDiv.innerHTML = '';
+        try {
+            const result = await api.testAIConnection(getAIFormValues());
+            resultDiv.innerHTML = result.ok
+                ? `<div style="color:var(--success, #22c55e);font-size:0.875rem;font-weight:600">Connection successful! Response: "${escapeHtml(result.response)}"</div>`
+                : `<div style="color:var(--danger, #ef4444);font-size:0.875rem;font-weight:600">Connection failed: ${escapeHtml(result.error)}</div>`;
+        } catch (err) { resultDiv.innerHTML = `<div style="color:var(--danger, #ef4444);font-size:0.875rem">${escapeHtml(err.message)}</div>`; }
+        finally { btn.disabled = false; btn.textContent = 'Test Connection'; }
+    });
+
+    document.getElementById('save-scraper-keys-btn').addEventListener('click', async () => {
+        const payload = {
+            usajobs: { api_key: document.getElementById('scraper-key-usajobs').value, email: document.getElementById('scraper-email-usajobs').value },
+            'adzuna-id': { api_key: document.getElementById('scraper-key-adzuna-id').value, email: '' },
+            adzuna: { api_key: document.getElementById('scraper-key-adzuna').value, email: '' },
+            jsearch: { api_key: document.getElementById('scraper-key-jsearch').value, email: '' },
+        };
+        try { await api.request('POST', '/api/scraper-keys', payload); showToast('Scraper keys saved', 'success'); }
+        catch (err) { showToast(err.message, 'error'); }
+    });
+}
+
+// === Tab 5: Data Management ===
+function renderTabData(container) {
+    container.innerHTML = `
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Export</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">Export your job data as CSV.</p>
+            <a href="/api/export/csv" class="btn btn-secondary" download>Download CSV Export</a>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Export / Import Profile</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">
+                Export your full profile data as JSON, or import from a previously exported file.
+            </p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-secondary" id="export-profile-btn">Export Profile JSON</button>
+                <input type="file" id="import-profile-file" accept=".json" style="font-size:0.875rem">
+                <button class="btn btn-secondary" id="import-profile-btn">Import Profile</button>
+            </div>
+        </div>
+
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Autofill History</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">Recent autofill sessions from the browser extension.</p>
+            <div id="autofill-history-list"><span class="spinner"></span></div>
         </div>
 
         <div class="card" style="padding:24px;margin-bottom:24px;border-left:4px solid var(--danger, #ef4444)">
@@ -1482,214 +2151,63 @@ function renderSettingsContent(container, config, aiSettings = {}, profile = {})
         </div>
     `;
 
-    document.getElementById('save-profile-btn').addEventListener('click', async () => {
-        const profileData = {
-            full_name: document.getElementById('profile-name').value,
-            email: document.getElementById('profile-email').value,
-            phone: document.getElementById('profile-phone').value,
-            location: document.getElementById('profile-location').value,
-            linkedin_url: document.getElementById('profile-linkedin').value,
-            github_url: document.getElementById('profile-github').value,
-            portfolio_url: document.getElementById('profile-portfolio').value,
-        };
-        try {
-            await api.request('POST', '/api/profile', profileData);
-            showToast('Profile saved', 'success');
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
+    // Load autofill history
+    api.request('GET', '/api/autofill/history').then(data => {
+        const list = container.querySelector('#autofill-history-list');
+        const items = data.items || [];
+        if (!items.length) { list.innerHTML = '<p style="color:var(--text-tertiary);font-size:0.875rem">No autofill sessions yet.</p>'; return; }
+        list.innerHTML = items.map(h => `
+            <div style="padding:8px 12px;background:var(--bg-surface-secondary);border-radius:var(--radius-sm);margin-bottom:6px">
+                <div style="font-weight:600;font-size:0.875rem">${escapeHtml(h.job_title || 'Unknown')} at ${escapeHtml(h.company || 'Unknown')}</div>
+                <div style="color:var(--text-tertiary);font-size:0.8125rem">${formatDate(h.created_at)}</div>
+            </div>
+        `).join('');
+    }).catch(() => {
+        container.querySelector('#autofill-history-list').innerHTML = '<p style="color:var(--text-tertiary)">Could not load history.</p>';
     });
 
-    document.querySelectorAll('.profile-copy-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const input = document.getElementById(btn.dataset.field);
-            if (input && input.value) {
-                copyToClipboard(input.value);
-            }
-        });
-    });
-
-    document.getElementById('upload-resume-btn').addEventListener('click', async () => {
-        const fileInput = document.getElementById('resume-file');
-        if (!fileInput.files.length) {
-            showToast('Select a resume file first', 'error');
-            return;
-        }
-        const btn = document.getElementById('upload-resume-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Analyzing...';
-        try {
-            const result = await api.uploadResume(fileInput.files[0]);
-            showToast(`Resume analyzed! ${result.search_terms.length} search terms extracted.`, 'success');
-            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([
-                api.getSearchConfig(),
-                api.getAISettings(),
-                api.request('GET', '/api/profile'),
-            ]);
-            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Upload & Analyze';
-        }
-    });
-
-    document.getElementById('save-terms-btn').addEventListener('click', async () => {
-        const text = document.getElementById('search-terms-textarea').value;
-        const terms = text.split('\n').map(t => t.trim()).filter(t => t.length > 0);
-        try {
-            await api.updateSearchTerms(terms);
-            showToast(`Saved ${terms.length} search terms`, 'success');
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
-    });
-
-    document.getElementById('save-exclude-btn').addEventListener('click', async () => {
-        const text = document.getElementById('exclude-terms-textarea').value;
-        const terms = text.split('\n').map(t => t.trim()).filter(t => t.length > 0);
-        try {
-            await api.request('POST', '/api/search-config/exclude-terms', { exclude_terms: terms });
-            showToast(`Saved ${terms.length} exclude term${terms.length !== 1 ? 's' : ''}`, 'success');
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
-    });
-
-    // AI provider toggle
-    const modelPlaceholders = {
-        anthropic: 'e.g. claude-sonnet-4-20250514',
-        openai: 'e.g. gpt-4o',
-        google: 'e.g. gemini-2.0-flash',
-        openrouter: 'e.g. anthropic/claude-sonnet-4',
-        ollama: '',
-    };
-    document.getElementById('ai-provider').addEventListener('change', (e) => {
-        const provider = e.target.value;
-        const isOllama = provider === 'ollama';
-        document.getElementById('ai-key-row').style.display = isOllama ? 'none' : '';
-        document.getElementById('ai-url-row').style.display = isOllama ? '' : 'none';
-        document.getElementById('ai-model').style.display = isOllama ? 'none' : '';
-        document.getElementById('ai-model').placeholder = modelPlaceholders[provider] || '';
-        document.getElementById('ai-model-ollama').style.display = isOllama ? '' : 'none';
-        if (isOllama) fetchOllamaModels();
-    });
-
-    // Fetch and populate Ollama models dropdown
-    async function fetchOllamaModels() {
-        const select = document.getElementById('ai-model-select');
-        const currentVal = select.value;
-        const btn = document.getElementById('refresh-models-btn');
-        btn.disabled = true;
-        btn.textContent = '...';
-        try {
-            const baseUrl = document.getElementById('ai-base-url').value || 'http://localhost:11434';
-            const result = await api.getOllamaModels(baseUrl);
-            if (result.ok && result.models.length > 0) {
-                select.innerHTML = result.models.map(m =>
-                    `<option value="${escapeHtml(m)}" ${m === currentVal ? 'selected' : ''}>${escapeHtml(m)}</option>`
-                ).join('');
-                if (!currentVal && result.models.length > 0) {
-                    select.value = result.models[0];
-                }
-            } else if (!result.ok) {
-                select.innerHTML = `<option value="">Failed to connect</option>`;
-                showToast(`Could not reach Ollama: ${result.error}`, 'error');
-            } else {
-                select.innerHTML = `<option value="">No models found</option>`;
-            }
-        } catch (err) {
-            select.innerHTML = `<option value="">Error loading models</option>`;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Refresh';
-        }
-    }
-
-    document.getElementById('refresh-models-btn').addEventListener('click', fetchOllamaModels);
-
-    // Auto-fetch models if Ollama is already selected
-    if (document.getElementById('ai-provider').value === 'ollama') {
-        fetchOllamaModels();
-    }
-
-    function getAIFormValues() {
-        const provider = document.getElementById('ai-provider').value;
-        const model = provider === 'ollama'
-            ? document.getElementById('ai-model-select').value
-            : document.getElementById('ai-model').value;
-        return {
-            provider,
-            api_key: document.getElementById('ai-api-key').value,
-            model,
-            base_url: document.getElementById('ai-base-url').value,
-        };
-    }
-
-    // Save AI settings
-    document.getElementById('save-ai-btn').addEventListener('click', async () => {
-        const btn = document.getElementById('save-ai-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Saving...';
-        try {
-            await api.updateAISettings(getAIFormValues());
-            showToast('AI settings saved', 'success');
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Save AI Settings';
-        }
-    });
-
-    // Test AI connection
-    document.getElementById('test-ai-btn').addEventListener('click', async () => {
-        const btn = document.getElementById('test-ai-btn');
-        const resultDiv = document.getElementById('ai-test-result');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> Testing...';
-        resultDiv.innerHTML = '';
-        try {
-            const result = await api.testAIConnection(getAIFormValues());
-            if (result.ok) {
-                resultDiv.innerHTML = `<div style="color:var(--success, #22c55e);font-size:0.875rem;font-weight:600">Connection successful! Response: "${escapeHtml(result.response)}"</div>`;
-            } else {
-                resultDiv.innerHTML = `<div style="color:var(--danger, #ef4444);font-size:0.875rem;font-weight:600">Connection failed: ${escapeHtml(result.error)}</div>`;
-            }
-        } catch (err) {
-            resultDiv.innerHTML = `<div style="color:var(--danger, #ef4444);font-size:0.875rem">${escapeHtml(err.message)}</div>`;
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Test Connection';
-        }
-    });
-
-    // Clear jobs
     document.getElementById('clear-jobs-btn').addEventListener('click', async () => {
         if (!confirm('This will permanently delete all jobs, scores, and applications. Continue?')) return;
-        try {
-            await api.request('POST', '/api/clear-jobs');
-            showToast('All jobs cleared', 'info');
-            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([api.getSearchConfig(), api.getAISettings(), api.request('GET', '/api/profile')]);
-            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
+        try { await api.request('POST', '/api/clear-jobs'); showToast('All jobs cleared', 'info'); }
+        catch (err) { showToast(err.message, 'error'); }
     });
 
-    // Reset everything
     document.getElementById('clear-all-btn').addEventListener('click', async () => {
-        if (!confirm('This will permanently delete ALL data including your resume, search terms, and AI settings. Continue?')) return;
+        if (!confirm('This will permanently delete ALL data. Continue?')) return;
         if (!confirm('Are you sure? This cannot be undone.')) return;
         try {
             await api.request('POST', '/api/clear-all');
             showToast('All data reset', 'info');
-            const [updatedConfig, updatedAI, updatedProfile] = await Promise.all([api.getSearchConfig(), api.getAISettings(), api.request('GET', '/api/profile')]);
-            renderSettingsContent(container, updatedConfig, updatedAI, updatedProfile);
-        } catch (err) {
-            showToast(err.message, 'error');
-        }
+            settingsData = {};
+            await renderSettings(document.getElementById('app'));
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    // Export profile
+    document.getElementById('export-profile-btn').addEventListener('click', async () => {
+        try {
+            const data = await api.request('GET', '/api/profile/full');
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'jobfinder-profile.json'; a.click();
+            URL.revokeObjectURL(url);
+            showToast('Profile exported', 'success');
+        } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    // Import profile
+    document.getElementById('import-profile-btn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('import-profile-file');
+        if (!fileInput.files.length) { showToast('Select a JSON file first', 'error'); return; }
+        try {
+            const text = await fileInput.files[0].text();
+            const data = JSON.parse(text);
+            await api.request('PUT', '/api/profile/full', data);
+            showToast('Profile imported successfully', 'success');
+            settingsData.fullProfile = await api.request('GET', '/api/profile/full');
+            settingsData.profile = await api.request('GET', '/api/profile');
+        } catch (err) { showToast(err.message, 'error'); }
     });
 }
 

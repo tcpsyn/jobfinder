@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+  <title>CareerPulse AutoFill</title>
+</head>
+<body>
+  <div class="popup">
+    <div class="header">
+      <h1>CareerPulse</h1>
+      <span class="subtitle">AutoFill</span>
+    </div>
+
+    <div class="status-row">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">Checking...</span>
+    </div>
+
+    <button class="btn-primary" id="fillBtn" disabled>Fill Application</button>
+
+    <div class="settings-section">
+      <label for="serverUrl">Server URL</label>
+      <div class="input-row">
+        <input type="text" id="serverUrl" value="http://localhost:8001" spellcheck="false">
+        <button class="btn-small" id="saveUrlBtn">Save</button>
+      </div>
+    </div>
+
+    <a class="settings-link" id="settingsLink" href="#">Open CareerPulse Settings</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
