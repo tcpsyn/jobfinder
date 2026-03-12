@@ -358,7 +358,200 @@
     return -1;
   }
 
-  function fillField(selector, value, action) {
+  // ─── Typeahead / autocomplete dropdown handling ───────────────
+
+  function findTypeaheadDropdown(el) {
+    // Search for visible dropdown/listbox near the input field
+    const searchSelectors = [
+      '[role="listbox"]',
+      '[role="option"]',
+      '.autocomplete-results',
+      '.autocomplete-dropdown',
+      '.suggestions',
+      '.tt-menu',               // Twitter typeahead
+      '.select2-results',
+      '.css-1nmdiq5-menu',      // react-select
+      '[class*="menu-list"]',   // react-select
+      '[class*="MenuList"]',    // react-select
+      '[class*="listbox"]',
+      '[class*="dropdown"] ul',
+      '[class*="suggestion"]',
+      '[class*="typeahead"]',
+      '[class*="autocomplete"]',
+      'ul[id*="listbox"]',
+      'ul[id*="options"]',
+      'div[id*="listbox"]',
+    ];
+
+    // Check aria-owns / aria-controls on the input first
+    for (const attr of ['aria-owns', 'aria-controls', 'aria-activedescendant', 'list']) {
+      const refId = el.getAttribute(attr);
+      if (refId) {
+        const ref = document.getElementById(refId);
+        if (ref && ref.offsetParent !== null) return ref;
+      }
+    }
+
+    // Search near the input (parent containers, then document-wide)
+    let container = el.parentElement;
+    for (let depth = 0; depth < 6 && container; depth++) {
+      for (const sel of searchSelectors) {
+        try {
+          const found = container.querySelector(sel);
+          if (found && found.offsetParent !== null && found !== el) return found;
+        } catch { /* invalid selector, skip */ }
+      }
+      container = container.parentElement;
+    }
+
+    // Document-wide search for visible listboxes/dropdowns
+    for (const sel of searchSelectors.slice(0, 4)) {
+      try {
+        const all = document.querySelectorAll(sel);
+        for (const node of all) {
+          if (node.offsetParent !== null) return node;
+        }
+      } catch { /* skip */ }
+    }
+
+    return null;
+  }
+
+  function getDropdownOptions(dropdownEl) {
+    // Collect clickable option elements from the dropdown
+    const optionSelectors = [
+      '[role="option"]',
+      'li',
+      '[class*="option"]',
+      '[class*="item"]',
+      '[class*="suggestion"]',
+      '[class*="result"]',
+    ];
+
+    for (const sel of optionSelectors) {
+      const options = dropdownEl.querySelectorAll(sel);
+      if (options.length > 0) {
+        // Filter to visible options
+        const visible = Array.from(options).filter(o => o.offsetParent !== null || o.offsetHeight > 0);
+        if (visible.length > 0) return visible;
+      }
+    }
+
+    // Fallback: direct children that look clickable
+    const children = Array.from(dropdownEl.children).filter(c => c.offsetHeight > 0);
+    if (children.length > 0) return children;
+
+    return [];
+  }
+
+  function fuzzyMatchDropdownOption(options, targetValue) {
+    if (!options.length) return null;
+    const target = targetValue.toLowerCase().trim();
+
+    // Exact text match
+    for (const opt of options) {
+      if (opt.textContent.trim().toLowerCase() === target) return opt;
+    }
+
+    // Text starts with target
+    for (const opt of options) {
+      if (opt.textContent.trim().toLowerCase().startsWith(target)) return opt;
+    }
+
+    // Target starts with option text (e.g., target "United States" matches "United States of America" or vice versa)
+    for (const opt of options) {
+      const text = opt.textContent.trim().toLowerCase();
+      if (text.startsWith(target) || target.startsWith(text)) return opt;
+    }
+
+    // Contains match
+    for (const opt of options) {
+      const text = opt.textContent.trim().toLowerCase();
+      if (text.includes(target) || target.includes(text)) return opt;
+    }
+
+    // Word-level overlap (for "Animas, Hidalgo, NM" matching "Animas")
+    const targetWords = target.split(/[\s,]+/).filter(Boolean);
+    let bestMatch = null;
+    let bestScore = 0;
+    for (const opt of options) {
+      const text = opt.textContent.trim().toLowerCase();
+      const words = text.split(/[\s,]+/).filter(Boolean);
+      let score = 0;
+      for (const tw of targetWords) {
+        if (words.some(w => w.startsWith(tw) || tw.startsWith(w))) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = opt;
+      }
+    }
+    if (bestMatch && bestScore > 0) return bestMatch;
+
+    // If only one option visible, select it (common for good typeahead matches)
+    if (options.length === 1) return options[0];
+
+    return null;
+  }
+
+  async function typeAndSelectDropdown(el, value) {
+    // Clear existing value first
+    setNativeValue(el, '');
+    dispatchEvents(el, ['input']);
+    await sleep(50);
+
+    // Type the value character-by-character to trigger typeahead
+    // Use the full value first, fall back to partial if no dropdown appears
+    setNativeValue(el, value);
+    dispatchEvents(el, ['input']);
+
+    // Also simulate keydown/keyup for frameworks that listen to those
+    try {
+      const lastChar = value.slice(-1);
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: lastChar, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: lastChar, bubbles: true }));
+    } catch { /* skip */ }
+
+    // Wait for dropdown to appear (check multiple times)
+    for (let wait = 0; wait < 5; wait++) {
+      await sleep(200);
+
+      const dropdown = findTypeaheadDropdown(el);
+      if (!dropdown) continue;
+
+      const options = getDropdownOptions(dropdown);
+      if (!options.length) continue;
+
+      const match = fuzzyMatchDropdownOption(options, value);
+      if (match) {
+        // Click the matching option
+        match.scrollIntoView?.({ block: 'nearest' });
+        match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        match.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        match.click();
+        await sleep(50);
+        return { success: true, selectedText: match.textContent.trim() };
+      }
+
+      // If dropdown is open but no match, select the first option as fallback
+      if (options.length > 0 && wait >= 3) {
+        const first = options[0];
+        first.scrollIntoView?.({ block: 'nearest' });
+        first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        first.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        first.click();
+        await sleep(50);
+        return { success: true, selectedText: first.textContent.trim(), fallback: true };
+      }
+    }
+
+    // No dropdown appeared — the field might not be a typeahead, which is fine
+    return { success: false };
+  }
+
+  // ─── Field filling ────────────────────────────────────────────
+
+  async function fillField(selector, value, action) {
     try {
       const el = resolveElement(selector);
       if (!el) return { selector, success: false, reason: 'element not found' };
@@ -368,8 +561,48 @@
 
       switch (action) {
         case 'fill_text': {
+          // Check if this might be a typeahead/autocomplete field
+          const isTypeahead = el.getAttribute('role') === 'combobox'
+            || el.getAttribute('aria-autocomplete')
+            || el.getAttribute('aria-owns')
+            || el.getAttribute('aria-controls')
+            || el.getAttribute('list')
+            || el.closest('[class*="autocomplete"]')
+            || el.closest('[class*="typeahead"]')
+            || el.closest('[class*="combobox"]');
+
+          if (isTypeahead) {
+            const result = await typeAndSelectDropdown(el, value);
+            if (result.success) {
+              return { selector, success: true, action, selectedText: result.selectedText };
+            }
+            // Fall through to normal fill if typeahead didn't work
+          }
+
+          // Normal text fill
           setNativeValue(el, value);
-          dispatchEvents(el, ['input', 'change', 'blur']);
+          dispatchEvents(el, ['input', 'change']);
+
+          // After setting value, check if a dropdown appeared anyway
+          // (many fields don't have aria hints but still show dropdowns)
+          await sleep(300);
+          const dropdown = findTypeaheadDropdown(el);
+          if (dropdown) {
+            const options = getDropdownOptions(dropdown);
+            if (options.length > 0) {
+              const match = fuzzyMatchDropdownOption(options, value);
+              if (match) {
+                match.scrollIntoView?.({ block: 'nearest' });
+                match.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                match.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                match.click();
+                await sleep(50);
+                return { selector, success: true, action, selectedText: match.textContent.trim() };
+              }
+            }
+          }
+
+          dispatchEvents(el, ['blur']);
           return { selector, success: true, action };
         }
 
@@ -448,7 +681,7 @@
       for (const mapping of currentMappings) {
         if (mapping.action === 'skip') continue;
 
-        const result = fillField(mapping.selector, mapping.value, mapping.action);
+        const result = await fillField(mapping.selector, mapping.value, mapping.action);
         results.push(result);
 
         if (result.success && !result.skipped) {
