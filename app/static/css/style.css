@@ -1276,7 +1276,7 @@ kbd {
     gap: 4px;
     border-bottom: 2px solid var(--border);
     margin-bottom: 24px;
-    overflow-x: auto;
+    overflow: hidden;
 }
 
 .settings-tab {
@@ -1293,6 +1293,12 @@ kbd {
     cursor: pointer;
     white-space: nowrap;
     transition: all var(--transition);
+    outline: none;
+}
+
+.settings-tab:focus-visible {
+    color: var(--text-primary);
+    background: var(--bg-surface-hover);
 }
 
 .settings-tab:hover {
