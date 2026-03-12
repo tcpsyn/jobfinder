@@ -8,10 +8,13 @@ from app.scrapers.jobicy import JobicyScraper
 from app.scrapers.indeed import IndeedScraper
 from app.scrapers.remoteok import RemoteOKScraper
 from app.scrapers.himalayas import HimalayasScraper
+from app.scrapers.wellfound import WellfoundScraper
+from app.scrapers.builtin import BuiltInScraper
 
 ALL_SCRAPERS = [
     HackerNewsScraper, RemotiveScraper, USAJobsScraper,
     LinkedInScraper, DiceScraper,
     ArbeitnowScraper, JobicyScraper, IndeedScraper,
     RemoteOKScraper, HimalayasScraper,
+    WellfoundScraper, BuiltInScraper,
 ]
