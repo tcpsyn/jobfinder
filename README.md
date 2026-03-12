@@ -4,7 +4,7 @@ Self-hosted job discovery and application tool. Scrapes jobs from multiple board
 
 ## Features
 
-- **Multi-source scraping** — LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy
+- **Multi-source scraping** — LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy, Indeed, RemoteOK, Himalayas
 - **AI-powered matching** — Scores jobs 0-100 against your resume with reasons and concerns
 - **Chrome extension autofill** — Auto-fills job applications on any ATS (Workday, Greenhouse, Lever, iCIMS, Taleo, custom forms) using AI
 - **Comprehensive profile** — Personal info, work history, education, skills, certifications, languages, references, EEO responses
@@ -126,7 +126,7 @@ The extension requires profile data in CareerPulse. Fill out your profile in **S
 
 ```
 FastAPI (async)
-├── Scrapers (7 sources) → SQLite (aiosqlite)
+├── Scrapers (10 sources) → SQLite (aiosqlite)
 ├── AIClient (Anthropic | OpenAI | Google | OpenRouter | Ollama)
 │   ├── JobMatcher (scoring)
 │   ├── ResumeAnalyzer (analysis + ATS)
@@ -148,6 +148,9 @@ FastAPI (async)
 | USA Jobs | REST API | Requires API key |
 | Arbeitnow | REST API | Client-side keyword filtering |
 | Jobicy | REST API | Tag-based filtering |
+| Indeed | RSS feed | Keyword + location filtering |
+| RemoteOK | REST API | Client-side keyword filtering |
+| Himalayas | REST API | Paginated, client-side keyword filtering |
 
 Jobs are deduplicated by SHA-256 hash of normalized title + company + URL.
 
@@ -237,7 +240,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-133 tests covering scrapers, database, API endpoints, matcher, tailor, resume analyzer, AI client, contact finder, apply link finder, salary estimator, company research, digest, profile CRUD, autofill, and custom Q&A.
+148 tests covering scrapers, database, API endpoints, matcher, tailor, resume analyzer, AI client, contact finder, apply link finder, salary estimator, company research, digest, profile CRUD, autofill, and custom Q&A.
 
 ## Tech Stack
 
