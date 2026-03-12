@@ -323,10 +323,7 @@ async function renderFeed(container) {
         selectModeBtn.classList.toggle('btn-primary', selectMode);
         selectModeBtn.classList.toggle('btn-secondary', !selectMode);
         updateBatchBar();
-        document.querySelectorAll('.job-card-checkbox').forEach(cb => {
-            cb.style.display = selectMode ? '' : 'none';
-            cb.checked = false;
-        });
+        loadJobs(false);
     });
 
     document.getElementById('batch-prepare-btn').addEventListener('click', batchPrepare);
@@ -476,9 +473,11 @@ function createJobCard(job) {
         cardSalaryHtml = `<span style="opacity:0.8">~${formatSalary(job.salary_estimate_min, job.salary_estimate_max)}</span>`;
     }
 
+    if (selectMode) card.classList.add('job-card-selecting');
+
     card.innerHTML = `
-        <input type="checkbox" class="job-card-checkbox" data-job-id="${job.id}" style="display:${selectMode ? '' : 'none'};position:absolute;top:12px;left:12px;width:18px;height:18px;z-index:2;cursor:pointer"${selectedJobIds.has(job.id) ? ' checked' : ''}>
-        <div class="job-card-content" style="${selectMode ? 'padding-left:28px' : ''}">
+        ${selectMode ? `<div class="job-card-check"><input type="checkbox" class="job-card-checkbox" data-job-id="${job.id}"${selectedJobIds.has(job.id) ? ' checked' : ''}></div>` : ''}
+        <div class="job-card-content">
             <div class="job-card-header">
                 <span class="job-card-title text-truncate">${escapeHtml(job.title)}</span>
                 ${newTag}
@@ -501,19 +500,18 @@ function createJobCard(job) {
     `;
 
     const checkbox = card.querySelector('.job-card-checkbox');
-    checkbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (checkbox.checked) {
-            selectedJobIds.add(job.id);
-        } else {
-            selectedJobIds.delete(job.id);
-        }
-        updateBatchBar();
-    });
+    if (checkbox) {
+        checkbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (checkbox.checked) selectedJobIds.add(job.id);
+            else selectedJobIds.delete(job.id);
+            updateBatchBar();
+        });
+    }
 
     card.addEventListener('click', (e) => {
         if (e.target.closest('.dismiss-btn') || e.target.closest('.job-card-checkbox')) return;
-        if (selectMode) {
+        if (selectMode && checkbox) {
             checkbox.checked = !checkbox.checked;
             if (checkbox.checked) selectedJobIds.add(job.id);
             else selectedJobIds.delete(job.id);

@@ -479,6 +479,23 @@ a:hover {
     position: relative;
 }
 
+.job-card-selecting {
+    grid-template-columns: auto 1fr auto;
+}
+
+.job-card-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.job-card-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
 .job-card-content {
     display: flex;
     flex-direction: column;
