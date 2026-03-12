@@ -641,7 +641,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
                             Prepare Application
                         </button>
                         ${job.apply_url
-                            ? `<a href="${escapeHtml(job.apply_url)}" target="_blank" class="btn btn-success" style="width:100%;text-align:center;background:#22c55e;color:white;text-decoration:none">Apply Now →</a>`
+                            ? `<button class="btn btn-success" id="apply-now-btn" style="width:100%;background:#22c55e;color:white;font-weight:600">Apply Now →</button>`
                             : `<button class="btn btn-secondary btn-sm" id="find-apply-btn" style="width:100%">Find Apply Link</button>`
                         }
                         <a href="${escapeHtml(job.url)}" target="_blank" class="btn btn-secondary">
@@ -846,6 +846,25 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
                 showToast(err.message, 'error');
                 findApplyBtn.disabled = false;
                 findApplyBtn.textContent = 'Find Apply Link';
+            }
+        });
+    }
+
+    const applyNowBtn = document.getElementById('apply-now-btn');
+    if (applyNowBtn) {
+        applyNowBtn.addEventListener('click', async () => {
+            applyNowBtn.disabled = true;
+            applyNowBtn.innerHTML = '<span class="spinner"></span> Applying...';
+            try {
+                const result = await api.request('POST', `/api/jobs/${job.id}/apply`);
+                window.open(result.url, '_blank');
+                showToast('Marked as applied!', 'success');
+                const updated = await api.getJob(job.id);
+                renderJobDetailContent(container, updated, profile);
+            } catch (err) {
+                showToast(err.message, 'error');
+                applyNowBtn.disabled = false;
+                applyNowBtn.textContent = 'Apply Now →';
             }
         });
     }

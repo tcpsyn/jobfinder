@@ -437,6 +437,17 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
         await app.state.db.add_event(job_id, "note", detail)
         return {"ok": True}
 
+    @app.post("/api/jobs/{job_id}/apply")
+    async def apply_to_job(job_id: int):
+        db = app.state.db
+        job = await db.get_job(job_id)
+        if not job:
+            raise HTTPException(404, "Job not found")
+        apply_url = job.get("apply_url") or job["url"]
+        await db.upsert_application(job_id, status="applied")
+        await db.add_event(job_id, "applied", "Applied via CareerPulse")
+        return {"url": apply_url, "status": "applied"}
+
     @app.post("/api/jobs/{job_id}/application")
     async def update_application(job_id: int, status: str = Query(...), notes: str = Query("")):
         app_row = await app.state.db.get_application(job_id)
