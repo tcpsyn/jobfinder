@@ -24,6 +24,9 @@ dev = [
     "pytest-httpx>=0.35.0",
     "httpx>=0.28.0",
 ]
+playwright = [
+    "playwright>=1.40.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
