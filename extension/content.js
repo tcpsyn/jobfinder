@@ -1841,6 +1841,13 @@
 
       preSubmitValues = captureFormValues();
       detectSubmission();
+
+      // Start multi-page tracking or update cumulative progress
+      if (multiPageState && multiPageState.currentPage > 1) {
+        updateMultiPageProgress(result.filledCount);
+      } else {
+        startMultiPageTracking(result.filledCount);
+      }
     } catch (err) {
       updateOverlay('error', `Error: ${err.message}`);
     }
@@ -1990,6 +1997,123 @@
     subtree: true,
   });
 
+
+  // ─── Multi-page form tracking ────────────────────────────────
+
+  let multiPageState = null;
+
+  function startMultiPageTracking(filledOnThisPage) {
+    stopMultiPageTracking();
+
+    const origin = location.origin;
+    multiPageState = {
+      origin,
+      currentPage: 1,
+      totalFilled: filledOnThisPage || 0,
+      observer: null,
+      debounceTimer: null,
+      origPushState: null,
+      origReplaceState: null,
+      popstateHandler: null,
+      hashchangeHandler: null,
+    };
+
+    function onPageChange() {
+      if (!multiPageState) return;
+      if (location.origin !== multiPageState.origin) {
+        stopMultiPageTracking();
+        return;
+      }
+      clearTimeout(multiPageState.debounceTimer);
+      multiPageState.debounceTimer = setTimeout(() => checkForNewPage(), 1000);
+    }
+
+    function checkForNewPage() {
+      if (!multiPageState) return;
+      const fields = extractFormData();
+      const unfilled = fields.filter(f => f.required && !f.currentValue);
+      if (unfilled.length >= 2) {
+        multiPageState.currentPage++;
+        showMultiPageBadge(multiPageState.currentPage);
+      }
+    }
+
+    // MutationObserver on body for DOM changes (SPA page transitions)
+    multiPageState.observer = new MutationObserver(() => onPageChange());
+    multiPageState.observer.observe(document.body, { childList: true, subtree: true });
+
+    // Popstate and hashchange for URL-based navigation
+    multiPageState.popstateHandler = () => onPageChange();
+    multiPageState.hashchangeHandler = () => onPageChange();
+    window.addEventListener('popstate', multiPageState.popstateHandler);
+    window.addEventListener('hashchange', multiPageState.hashchangeHandler);
+
+    // Patch history.pushState and history.replaceState for SPA navigation
+    multiPageState.origPushState = history.pushState;
+    history.pushState = function (...args) {
+      multiPageState.origPushState.apply(this, args);
+      onPageChange();
+    };
+
+    multiPageState.origReplaceState = history.replaceState;
+    history.replaceState = function (...args) {
+      multiPageState.origReplaceState.apply(this, args);
+      onPageChange();
+    };
+  }
+
+  function stopMultiPageTracking() {
+    if (!multiPageState) return;
+
+    if (multiPageState.observer) {
+      multiPageState.observer.disconnect();
+    }
+    clearTimeout(multiPageState.debounceTimer);
+
+    if (multiPageState.popstateHandler) {
+      window.removeEventListener('popstate', multiPageState.popstateHandler);
+    }
+    if (multiPageState.hashchangeHandler) {
+      window.removeEventListener('hashchange', multiPageState.hashchangeHandler);
+    }
+
+    // Restore original history methods
+    if (multiPageState.origPushState) {
+      history.pushState = multiPageState.origPushState;
+    }
+    if (multiPageState.origReplaceState) {
+      history.replaceState = multiPageState.origReplaceState;
+    }
+
+    multiPageState = null;
+  }
+
+  function showMultiPageBadge(pageNum) {
+    const existing = document.getElementById(`${PREFIX}-multipage-badge`);
+    if (existing) existing.remove();
+
+    const badge = document.createElement('div');
+    badge.id = `${PREFIX}-multipage-badge`;
+    badge.textContent = `Page ${pageNum} detected \u2014 fill?`;
+    badge.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:2147483647;'
+      + 'padding:10px 18px;background:#1a73e8;color:#fff;border-radius:8px;'
+      + 'font:14px/1.4 -apple-system,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+
+    badge.addEventListener('click', async () => {
+      badge.remove();
+      await startFillFlow();
+    });
+    document.body.appendChild(badge);
+  }
+
+  function updateMultiPageProgress(filledOnThisPage) {
+    if (!multiPageState) return;
+    multiPageState.totalFilled += filledOnThisPage;
+    const total = multiPageState.totalFilled;
+    const pages = multiPageState.currentPage;
+    updateOverlay('done', `Filled ${total} fields across ${pages} page${pages > 1 ? 's' : ''}.`);
+  }
+
   // ─── Message handler ──────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -2080,6 +2204,9 @@
       detectFileUploadFields,
       showUploadHelper,
       detectUploadType,
+
+      startMultiPageTracking,
+      stopMultiPageTracking,
     };
   }
 
