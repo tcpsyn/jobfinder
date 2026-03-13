@@ -1206,6 +1206,122 @@
     }
   }
 
+  // ─── File upload helper ──────────────────────────────────────
+
+  let currentJobId = null;
+
+  function getFieldLabel(fileInput) {
+    const label = findLabel(fileInput);
+    if (label) return label;
+    const name = (fileInput.name || '').toLowerCase();
+    const id = (fileInput.id || '').toLowerCase();
+    return `${name} ${id}`;
+  }
+
+  function detectUploadType(fileInput) {
+    const text = getFieldLabel(fileInput).toLowerCase();
+    if (/cover.?letter/i.test(text)) return 'cover-letter';
+    if (/resume|cv|curriculum/i.test(text)) return 'resume';
+
+    // Also check accept attribute for document types
+    const accept = (fileInput.getAttribute('accept') || '').toLowerCase();
+    if (accept && /pdf|doc|rtf/.test(accept)) {
+      // Could be resume or cover letter; check nearby context
+      const parent = fileInput.closest('div, fieldset, section, li');
+      const parentText = parent ? parent.textContent.toLowerCase() : '';
+      if (/cover.?letter/i.test(parentText)) return 'cover-letter';
+      if (/resume|cv|curriculum/i.test(parentText)) return 'resume';
+    }
+
+    return null;
+  }
+
+  function detectFileUploadFields() {
+    const fileInputs = deepQuerySelectorAll(document, 'input[type="file"]');
+
+    for (const fileInput of fileInputs) {
+      // Skip if already processed
+      if (fileInput.dataset.cpUploadHelper) continue;
+
+      const uploadType = detectUploadType(fileInput);
+      if (!uploadType) continue;
+
+      fileInput.dataset.cpUploadHelper = uploadType;
+      showUploadHelper(fileInput, uploadType);
+    }
+  }
+
+  function showUploadHelper(fileInput, type) {
+    const label = type === 'cover-letter' ? 'Cover letter' : 'Tailored resume';
+    const messageType = type === 'cover-letter' ? 'downloadCoverLetter' : 'downloadResume';
+
+    // Highlight the file input
+    fileInput.classList.add(`${PREFIX}-upload-highlight`);
+
+    // Create tooltip container
+    const helper = document.createElement('div');
+    helper.className = `${PREFIX}-upload-helper`;
+
+    const text = document.createElement('span');
+    text.className = `${PREFIX}-upload-helper-text`;
+    text.textContent = `${label} ready -- download from CareerPulse, then upload here`;
+
+    const btn = document.createElement('button');
+    btn.className = `${PREFIX}-upload-helper-btn`;
+    btn.textContent = `Download ${label}`;
+    btn.type = 'button';
+
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!currentJobId) {
+        text.textContent = 'No job ID available. Open this page from CareerPulse first.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Downloading...';
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: messageType,
+          jobId: currentJobId,
+        });
+
+        if (response && response.ok) {
+          helper.classList.add(`${PREFIX}-upload-helper-downloaded`);
+          text.textContent = 'Downloaded! Now upload it above.';
+          btn.textContent = 'Downloaded';
+        } else {
+          text.textContent = `Download failed: ${response?.error || 'unknown error'}`;
+          btn.disabled = false;
+          btn.textContent = `Retry Download`;
+        }
+      } catch (err) {
+        text.textContent = `Download failed: ${err.message}`;
+        btn.disabled = false;
+        btn.textContent = `Retry Download`;
+      }
+    });
+
+    helper.appendChild(text);
+    helper.appendChild(btn);
+
+    // Position the helper near the file input
+    const parent = fileInput.parentElement;
+    if (parent) {
+      // Ensure parent has relative positioning for absolute placement
+      const parentPos = getComputedStyle(parent).position;
+      if (parentPos === 'static') {
+        parent.style.position = 'relative';
+      }
+      parent.appendChild(helper);
+    } else {
+      fileInput.insertAdjacentElement('afterend', helper);
+    }
+  }
+
   // ─── Iterative form fill ──────────────────────────────────────
 
   async function fillForm(mappings) {
@@ -1261,6 +1377,9 @@
 
       if (newUnmapped.length === 0) break;
     }
+
+    // After filling, detect file upload fields that need user help
+    detectFileUploadFields();
 
     return { results, filledCount, total: totalMappable };
   }
@@ -1877,6 +1996,7 @@
     try {
       switch (message.type) {
         case 'startFill':
+          if (message.jobId) currentJobId = message.jobId;
           startFillFlow().then(() => {
             sendResponse({ ok: true, state: currentState });
           }).catch(err => {
@@ -1957,6 +2077,9 @@
       tryShowBadge,
       undoField,
       originalValues,
+      detectFileUploadFields,
+      showUploadHelper,
+      detectUploadType,
     };
   }
 

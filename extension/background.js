@@ -61,6 +61,28 @@ async function getResumeForJob(jobId) {
   }
 }
 
+async function downloadDocument(jobId, docType) {
+  try {
+    const base = await getServerUrl();
+    const endpoint = docType === 'cover-letter'
+      ? `/api/jobs/${jobId}/cover-letter.pdf`
+      : `/api/jobs/${jobId}/resume.pdf`;
+    const resp = await fetch(`${base}${endpoint}`);
+    if (!resp.ok) throw new Error(`${resp.status}: ${resp.statusText}`);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const filename = docType === 'cover-letter'
+      ? `cover-letter-${jobId}.pdf`
+      : `resume-${jobId}.pdf`;
+    await chrome.downloads.download({ url, filename, saveAs: false });
+    // Clean up the object URL after a delay
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 async function saveLearnedData(data) {
   try {
     const resp = await apiFetch('/api/profile/learn', {
@@ -108,6 +130,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return await saveLearnedData(message.data);
         case 'getCustomQA':
           return await getCustomQA();
+        case 'downloadResume':
+          return await downloadDocument(message.jobId, 'resume');
+        case 'downloadCoverLetter':
+          return await downloadDocument(message.jobId, 'cover-letter');
         default:
           return { ok: false, error: `Unknown message type: ${message.type}` };
       }
