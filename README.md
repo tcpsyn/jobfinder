@@ -30,6 +30,22 @@ Self-hosted job discovery and application tool. Scrapes jobs from multiple board
 - **Automated scheduling** — Periodic scraping with APScheduler
 - **Persistent data** — SQLite database survives restarts via Docker volume mount
 - **Tabbed settings** — Profile, Work History, Job Search, AI & Integrations, Data Management
+- **Server-side saved views** — Filter presets saved and synced across devices
+- **Job comparison view** — Side-by-side comparison of 2-3 jobs (score, salary, location, match reasons)
+- **DOCX export** — Download tailored resumes and cover letters as Word documents alongside PDF
+- **Multiple resume versions** — Manage and store multiple resumes, select which to use per application
+- **Application response tracking** — Log interview invites, rejections, and ghosted outcomes; analytics dashboard
+- **Job board overlay extension** — Save buttons and match score badges injected directly on LinkedIn, Indeed, Dice, and Glassdoor pages
+- **Auto-track applications** — Extension detects form submissions and automatically marks jobs as applied
+- **Job alerts** — Saved search alerts notify you when new high-scoring matches appear
+- **Bulk application queue** — Queue jobs for batch preparation with an approval workflow before submission
+- **Follow-up automation** — AI-drafted follow-up emails with configurable templates and auto-send
+- **Application success prediction** — AI predicts response probability based on your application history
+- **Networking contact CRM** — Track contacts, interactions, and referrals linked to jobs
+- **Career trajectory intelligence** — AI suggests stretch and pivot roles based on your career arc
+- **Offer comparison calculator** — Total compensation analysis with cost-of-living normalization
+- **Intelligent queue orchestration** — Extension auto-fills queued applications sequentially; never auto-submits
+- **Custom Q&A autofill** — Extension fills skipped fields using your Q&A bank with fuzzy matching
 
 ## Quick Start
 
@@ -113,8 +129,12 @@ The CareerPulse AutoFill extension auto-fills job application forms on any ATS u
 - Sends sanitized form HTML to `POST /api/autofill/analyze`
 - AI maps your full profile (personal info, work history, education, skills, EEO, custom Q&A) to form fields
 - Fields are filled iteratively — handles dynamic/conditional forms (up to 5 passes)
+- Skipped fields are filled from your Q&A bank using fuzzy matching
 - React-compatible filling using native property descriptor setters
 - Works across iframes (common in Workday, iCIMS)
+- **Job board overlay** — Injects a Save button and AI match score badge on LinkedIn, Indeed, Dice, and Glassdoor job listings; saved jobs sync directly to CareerPulse
+- **Auto-track applied** — Detects form submissions and automatically marks the job as applied in CareerPulse
+- **Queue fill orchestration** — Fills queued applications sequentially in the background; presents each form for review before moving to the next; never auto-submits
 
 ### Configuration
 
@@ -130,11 +150,17 @@ FastAPI (async)
 ├── AIClient (Anthropic | OpenAI | Google | OpenRouter | Ollama)
 │   ├── JobMatcher (scoring)
 │   ├── ResumeAnalyzer (analysis + ATS)
-│   ├── Tailor (resume + cover letter)
-│   └── AutoFill analyzer (form field mapping)
-├── APScheduler (periodic scraping)
+│   ├── Tailor (resume + cover letter + DOCX)
+│   ├── AutoFill analyzer (form field mapping)
+│   ├── Predictor (application success probability)
+│   ├── CareerAdvisor (trajectory + role suggestions)
+│   ├── OfferCalculator (total comp + cost-of-living)
+│   └── FollowUp (email drafting + auto-send)
+├── ContactCRM (contacts, interactions, referrals)
+├── ApplicationQueue (batch prep + approval workflow)
+├── APScheduler (periodic scraping + alerts)
 ├── Vanilla JS SPA (frontend)
-└── Chrome Extension (autofill client)
+└── Chrome Extension (autofill + overlay + queue fill)
 ```
 
 ### Scrapers
@@ -156,7 +182,7 @@ Jobs are deduplicated by SHA-256 hash of normalized title + company + URL.
 
 ### Database
 
-SQLite with tables: `jobs`, `sources`, `job_scores`, `applications`, `app_events`, `search_config`, `ai_settings`, `user_profile`, `companies`, `scraper_keys`, `work_history`, `education`, `certifications`, `skills`, `languages`, `user_references`, `military_service`, `eeo_responses`, `custom_qa`, `autofill_history`. Schema auto-migrates on startup.
+SQLite with tables: `jobs`, `sources`, `job_scores`, `applications`, `app_events`, `search_config`, `ai_settings`, `user_profile`, `companies`, `scraper_keys`, `work_history`, `education`, `certifications`, `skills`, `languages`, `user_references`, `military_service`, `eeo_responses`, `custom_qa`, `autofill_history`, `saved_views`, `resumes`, `job_alerts`, `application_queue`, `follow_up_templates`, `contacts`, `contact_interactions`, `job_contacts`, `career_suggestions`, `offers`. Schema auto-migrates on startup (~30 tables).
 
 ## API
 
@@ -221,6 +247,79 @@ SQLite with tables: `jobs`, `sources`, `job_scores`, `applications`, `app_events
 - `GET /api/scraper-keys` — Get configured scraper keys (masked)
 - `POST /api/scraper-keys` — Save scraper API keys
 
+### Saved Views
+- `GET /api/saved-views` — List saved filter presets
+- `POST /api/saved-views` — Create saved view
+- `PUT /api/saved-views/:id` — Update saved view
+- `DELETE /api/saved-views/:id` — Delete saved view
+
+### Resumes
+- `GET /api/resumes` — List resume versions
+- `POST /api/resumes` — Create resume version
+- `PUT /api/resumes/:id` — Update resume
+- `DELETE /api/resumes/:id` — Delete resume
+- `POST /api/resumes/:id/set-default` — Set default resume
+
+### Response Tracking
+- `POST /api/jobs/:id/response` — Log application response (invite, rejection, ghosted)
+- `GET /api/analytics/response-rates` — Response rate analytics dashboard
+
+### External Jobs
+- `POST /api/jobs/save-external` — Save job captured from extension overlay
+- `GET /api/jobs/lookup` — Lookup job by URL
+- `POST /api/jobs/mark-applied-by-url` — Auto-track applied job by URL
+
+### Alerts
+- `GET /api/alerts` — List job alerts
+- `POST /api/alerts` — Create alert
+- `PUT /api/alerts/:id` — Update alert
+- `DELETE /api/alerts/:id` — Delete alert
+
+### Application Queue
+- `POST /api/queue/add` — Add job to application queue
+- `GET /api/queue` — List queued applications
+- `POST /api/queue/prepare-all` — Batch prepare all queued applications
+- `POST /api/queue/:id/approve` — Approve queued application
+- `DELETE /api/queue/:id` — Remove from queue
+- `POST /api/queue/:id/submit-for-review` — Submit for review
+- `POST /api/queue/:id/reject` — Reject queued application
+- `POST /api/queue/approve-all` — Approve all queued applications
+- `POST /api/queue/reject-all` — Reject all queued applications
+- `GET /api/queue/events` — SSE progress stream
+- `POST /api/queue/:id/fill-status` — Extension reports autofill status
+
+### Follow-Up Templates
+- `GET /api/follow-up-templates` — List templates
+- `POST /api/follow-up-templates` — Create template
+- `PUT /api/follow-up-templates/:id` — Update template
+- `DELETE /api/follow-up-templates/:id` — Delete template
+
+### Contacts (CRM)
+- `GET /api/contacts` — List contacts
+- `POST /api/contacts` — Create contact
+- `PUT /api/contacts/:id` — Update contact
+- `DELETE /api/contacts/:id` — Delete contact
+- `GET /api/contacts/:id/interactions` — List interactions for contact
+- `POST /api/contacts/:id/interactions` — Log interaction
+- `GET /api/jobs/:id/contacts` — List contacts linked to job
+- `POST /api/jobs/:id/contacts` — Link contact to job
+- `DELETE /api/jobs/:id/contacts` — Unlink contact from job
+
+### Career Advisor
+- `POST /api/career/analyze` — Trigger career trajectory analysis
+- `GET /api/career/suggestions` — List AI-generated role suggestions
+- `POST /api/career/suggestions/:id/accept` — Accept a suggestion
+
+### Offers
+- `GET /api/offers` — List offers
+- `POST /api/offers` — Create offer
+- `PUT /api/offers/:id` — Update offer
+- `DELETE /api/offers/:id` — Delete offer
+- `GET /api/offers/compare` — Side-by-side offer comparison with cost-of-living normalization
+
+### Predictions
+- `GET /api/jobs/:id/predict-success` — AI-predicted response probability for a job
+
 ### Operations
 - `GET /api/stats` — Job counts by status
 - `GET /api/digest` — Daily digest of new high-scoring jobs
@@ -240,7 +339,13 @@ pip install -e ".[dev]"
 pytest
 ```
 
-148 tests covering scrapers, database, API endpoints, matcher, tailor, resume analyzer, AI client, contact finder, apply link finder, salary estimator, company research, digest, profile CRUD, autofill, and custom Q&A.
+370 tests covering scrapers, database, API endpoints, matcher, tailor, resume analyzer, AI client, contact finder, apply link finder, salary estimator, company research, digest, profile CRUD, autofill, custom Q&A, saved views, response tracking, alerts, application queue, follow-up templates, contacts CRM, career advisor, offers, and predictions.
+
+The Chrome extension has a separate test suite (295 tests) using Vitest:
+
+```bash
+cd extension && pnpm test
+```
 
 ## Tech Stack
 
@@ -251,3 +356,4 @@ pytest
 - **Scraping**: feedparser, BeautifulSoup4, httpx
 - **Scheduling**: APScheduler
 - **PDF**: PyMuPDF
+- **DOCX**: python-docx
