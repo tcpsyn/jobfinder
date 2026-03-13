@@ -1440,6 +1440,26 @@
     }
   });
 
+  // ─── Keyboard shortcut: Escape to dismiss overlay ─────────────
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+
+    // Don't intercept Escape when user is focused on a form field
+    const active = document.activeElement;
+    if (active) {
+      const tag = active.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (active.isContentEditable) return;
+    }
+
+    // Dismiss overlay if present
+    if (overlayEl) {
+      removeOverlay();
+      currentState = 'idle';
+    }
+  });
+
   // ─── Export for testing ────────────────────────────────────────
 
   if (typeof window !== 'undefined' && window.__cpAutofillTest) {

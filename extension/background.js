@@ -82,6 +82,16 @@ async function getCustomQA() {
   }
 }
 
+// ─── Keyboard shortcut handler ─────────────────────────────────
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'start-fill') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, { type: 'startFill' });
+    }
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = async () => {
     try {
