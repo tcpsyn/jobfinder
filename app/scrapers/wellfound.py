@@ -14,13 +14,59 @@ logger = logging.getLogger(__name__)
 # Apollo GraphQL state embedded in the page.
 
 BASE_URL = "https://wellfound.com"
-ROLE_PATHS = [
+
+# Standard Wellfound role slugs — these are real paths on wellfound.com.
+ROLE_SLUG_MAP = {
+    "software": "/role/r/software-engineer",
+    "backend": "/role/r/backend-engineer",
+    "frontend": "/role/r/frontend-engineer",
+    "full stack": "/role/r/full-stack-engineer",
+    "fullstack": "/role/r/full-stack-engineer",
+    "devops": "/role/r/devops-engineer",
+    "sre": "/role/r/site-reliability-engineer",
+    "site reliability": "/role/r/site-reliability-engineer",
+    "infrastructure": "/role/r/infrastructure-engineer",
+    "data engineer": "/role/r/data-engineer",
+    "data scientist": "/role/r/data-scientist",
+    "data": "/role/r/data-engineer",
+    "machine learning": "/role/r/machine-learning-engineer",
+    "ml": "/role/r/machine-learning-engineer",
+    "ai": "/role/r/machine-learning-engineer",
+    "mobile": "/role/r/mobile-engineer",
+    "ios": "/role/r/ios-engineer",
+    "android": "/role/r/android-engineer",
+    "security": "/role/r/security-engineer",
+    "cloud": "/role/r/cloud-engineer",
+    "platform": "/role/r/platform-engineer",
+    "qa": "/role/r/qa-engineer",
+    "test": "/role/r/qa-engineer",
+    "product manager": "/role/r/product-manager",
+    "designer": "/role/r/product-designer",
+    "ux": "/role/r/product-designer",
+}
+
+DEFAULT_ROLES = [
     "/role/r/software-engineer",
-    "/role/r/devops-engineer",
     "/role/r/backend-engineer",
     "/role/r/full-stack-engineer",
+    "/role/r/devops-engineer",
+    "/role/r/data-engineer",
 ]
-DEFAULT_ROLES = ["/role/r/software-engineer"]
+
+BROWSER_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Referer": "https://wellfound.com/",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+}
 
 
 class WellfoundScraper(BaseScraper):
@@ -31,10 +77,50 @@ class WellfoundScraper(BaseScraper):
             return DEFAULT_ROLES
 
         paths = []
+        seen = set()
         for term in self.search_terms:
-            slug = re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
-            paths.append(f"/role/r/{slug}")
-        return paths[:5]
+            term_lower = term.lower().strip()
+            matched = False
+            # Try exact match first, then substring match
+            for keyword, path in ROLE_SLUG_MAP.items():
+                if keyword in term_lower or term_lower in keyword:
+                    if path not in seen:
+                        paths.append(path)
+                        seen.add(path)
+                    matched = True
+                    break
+            if not matched:
+                # Fall back to slugifying single/double word terms that look
+                # like they could be a Wellfound role slug
+                slug = re.sub(r"[^a-z0-9]+", "-", term_lower).strip("-")
+                path = f"/role/r/{slug}"
+                if path not in seen:
+                    paths.append(path)
+                    seen.add(path)
+
+        # Also include default roles to broaden coverage
+        for path in DEFAULT_ROLES:
+            if path not in seen:
+                paths.append(path)
+                seen.add(path)
+
+        return paths[:10]
+
+    def _matches_search_terms(self, searchable: str) -> bool:
+        """Check if searchable text matches any search term.
+
+        Splits each search term into words and requires at least 2 words
+        (or all words if the term has fewer than 2) to appear in the text.
+        """
+        for term in self.search_terms:
+            words = term.lower().split()
+            if not words:
+                continue
+            threshold = min(2, len(words))
+            matched = sum(1 for w in words if w in searchable)
+            if matched >= threshold:
+                return True
+        return False
 
     def _parse_next_data(self, html: str) -> list[dict]:
         """Extract job data from __NEXT_DATA__ script tag (Next.js SSR)."""
@@ -197,7 +283,9 @@ class WellfoundScraper(BaseScraper):
             for path in paths:
                 url = f"{BASE_URL}{path}"
                 try:
-                    resp = await client.get(url)
+                    resp = await self.rate_limited_get(
+                        client, url, headers=BROWSER_HEADERS,
+                    )
                     resp.raise_for_status()
                 except Exception as e:
                     logger.error(f"Wellfound fetch failed for {path}: {e}")
@@ -225,7 +313,7 @@ class WellfoundScraper(BaseScraper):
 
                     if self.search_terms:
                         searchable = f"{job.title} {job.description} {' '.join(job.tags)}".lower()
-                        if not any(term.lower() in searchable for term in self.search_terms):
+                        if not self._matches_search_terms(searchable):
                             continue
 
                     jobs.append(job)

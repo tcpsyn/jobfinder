@@ -192,6 +192,8 @@ async def lifespan(app: FastAPI):
 
     if getattr(app.state, "scheduler", None):
         app.state.scheduler.shutdown(wait=False)
+    from app.browser_pool import shutdown_browser_pool
+    await shutdown_browser_pool()
     await app.state.db.close()
 
 

@@ -1,3 +1,4 @@
+import json
 import re
 
 import pytest
@@ -7,24 +8,35 @@ from app.scrapers.dice import DiceScraper
 from app.scrapers.remotive import RemotiveScraper
 from app.scrapers.usajobs import USAJobsScraper
 
-MOCK_RSS = """<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
-  <channel>
-    <item>
-      <title>Test Job</title>
-      <link>https://www.indeed.com/viewjob?jk=abc</link>
-      <author>TestCo</author>
-      <description>A test job</description>
-    </item>
-  </channel>
-</rss>"""
+
+def _make_indeed_html(jobs_data: list[dict]) -> str:
+    results = []
+    for job in jobs_data:
+        results.append({
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "formattedLocation": "Remote",
+            "snippet": job.get("description", ""),
+            "jobkey": job.get("jobkey", ""),
+            "formattedRelativeTime": "",
+            "salarySnippet": {"text": ""},
+        })
+    mosaic_data = {"metaData": {"mosaicProviderJobCardsModel": {"results": results}}}
+    padding = " " * 1000
+    return f'<html><body>{padding}<script>window.mosaic.providerData = {json.dumps(mosaic_data)};</script></body></html>'
+
+
+INDEED_URL_PATTERN = re.compile(r"https://www\.indeed\.com/jobs\?.*")
 
 
 @pytest.mark.asyncio
 async def test_indeed_uses_custom_terms(httpx_mock):
     terms = ["kubernetes engineer remote", "cloud architect remote"]
-    for _ in terms:
-        httpx_mock.add_response(url=re.compile(r"https://www\.indeed\.com/rss\?.*"), text=MOCK_RSS)
+    # First term returns a kubernetes job, second returns a cloud job
+    html1 = _make_indeed_html([{"title": "Kubernetes Engineer", "company": "TestCo", "description": "kubernetes engineer role", "jobkey": "k1"}])
+    html2 = _make_indeed_html([{"title": "Cloud Architect", "company": "TestCo", "description": "cloud architect role", "jobkey": "c1"}])
+    httpx_mock.add_response(url=INDEED_URL_PATTERN, text=html1)
+    httpx_mock.add_response(url=INDEED_URL_PATTERN, text=html2)
     scraper = IndeedScraper(search_terms=terms)
     jobs = await scraper.scrape()
     assert len(jobs) == 2

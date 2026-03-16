@@ -256,6 +256,54 @@ async def test_wellfound_deduplicates(httpx_mock):
     assert len(urls) == len(set(urls))
 
 
+@pytest.mark.httpx_mock(can_send_already_matched_responses=True)
+@pytest.mark.asyncio
+async def test_wellfound_multiword_search_filter(httpx_mock):
+    """Multi-word search terms match if at least 2 words appear."""
+    httpx_mock.add_response(
+        url=re.compile(r"https://wellfound\.com/role/.*"),
+        text=MOCK_NEXTDATA_HTML,
+    )
+    # "senior devops" should match "Senior DevOps Engineer" (both words present)
+    scraper = WellfoundScraper(search_terms=["senior devops"])
+    jobs = await scraper.scrape()
+    assert len(jobs) == 1
+    assert "DevOps" in jobs[0].title
+
+
+def test_wellfound_role_slug_mapping():
+    """Search terms map to known Wellfound role slugs."""
+    scraper = WellfoundScraper(search_terms=["devops"])
+    paths = scraper._get_role_paths()
+    assert "/role/r/devops-engineer" in paths
+
+    scraper2 = WellfoundScraper(search_terms=["machine learning"])
+    paths2 = scraper2._get_role_paths()
+    assert "/role/r/machine-learning-engineer" in paths2
+
+    scraper3 = WellfoundScraper(search_terms=["sre"])
+    paths3 = scraper3._get_role_paths()
+    assert "/role/r/site-reliability-engineer" in paths3
+
+
+def test_wellfound_default_roles_appended():
+    """Default roles are appended for broader coverage."""
+    scraper = WellfoundScraper(search_terms=["security"])
+    paths = scraper._get_role_paths()
+    assert "/role/r/security-engineer" in paths
+    # Default roles should also appear
+    assert "/role/r/software-engineer" in paths
+
+
+def test_wellfound_role_paths_capped_at_10():
+    """Role paths are capped at 10."""
+    terms = ["software", "backend", "frontend", "devops", "sre",
+             "data", "ml", "mobile", "ios", "android", "security", "cloud"]
+    scraper = WellfoundScraper(search_terms=terms)
+    paths = scraper._get_role_paths()
+    assert len(paths) <= 10
+
+
 @pytest.mark.asyncio
 async def test_wellfound_int_parsing():
     from app.scrapers.wellfound import _parse_int

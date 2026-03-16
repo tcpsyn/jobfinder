@@ -5,12 +5,27 @@ from app.scrapers.base import BaseScraper, JobListing
 logger = logging.getLogger(__name__)
 
 API_URL = "https://himalayas.app/jobs/api"
-MAX_PAGES = 3
-PAGE_SIZE = 20
+MAX_PAGES = 10
+PAGE_SIZE = 50
+MIN_WORD_MATCHES = 2
 
 
 class HimalayasScraper(BaseScraper):
     source_name = "himalayas"
+
+    def _matches_search(self, searchable: str) -> bool:
+        """Check if searchable text matches any search term.
+
+        For each search term, split into individual words and require at least
+        MIN_WORD_MATCHES words (or all words if the term has fewer) to appear.
+        """
+        for term in self.search_terms:
+            words = term.lower().split()
+            threshold = min(len(words), MIN_WORD_MATCHES)
+            matched = sum(1 for w in words if w in searchable)
+            if matched >= threshold:
+                return True
+        return False
 
     async def scrape(self) -> list[JobListing]:
         jobs = []
@@ -36,9 +51,7 @@ class HimalayasScraper(BaseScraper):
                     categories = item.get("categories", [])
                     searchable = f"{title} {description} {' '.join(categories)}".lower()
 
-                    if self.search_terms and not any(
-                        term.lower() in searchable for term in self.search_terms
-                    ):
+                    if self.search_terms and not self._matches_search(searchable):
                         continue
 
                     location_restrictions = item.get("locationRestrictions", [])

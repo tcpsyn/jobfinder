@@ -124,6 +124,22 @@ class BuiltInScraper(BaseScraper):
             tags=tags,
         )
 
+    def _matches_search_terms(self, searchable: str) -> bool:
+        """Check if searchable text matches any search term.
+
+        Splits each search term into words and requires at least 2 words
+        (or all words if the term has fewer than 2) to appear in the text.
+        """
+        for term in self.search_terms:
+            words = term.lower().split()
+            if not words:
+                continue
+            threshold = min(2, len(words))
+            matched = sum(1 for w in words if w in searchable)
+            if matched >= threshold:
+                return True
+        return False
+
     async def scrape(self) -> list[JobListing]:
         paths = self._get_listing_paths()
         jobs = []
@@ -177,8 +193,8 @@ class BuiltInScraper(BaseScraper):
                 if detail_data:
                     job = self._extract_job_from_detail(detail_data, detail_url)
                     if self.search_terms:
-                        searchable = f"{job.title} {job.description} {' '.join(job.tags)}".lower()
-                        if not any(term.lower() in searchable for term in self.search_terms):
+                        searchable = f"{job.title} {job.description} {job.company} {' '.join(job.tags)}".lower()
+                        if not self._matches_search_terms(searchable):
                             continue
                     jobs.append(job)
                 else:

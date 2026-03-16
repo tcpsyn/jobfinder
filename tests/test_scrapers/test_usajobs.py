@@ -70,6 +70,75 @@ async def test_usajobs_parse(httpx_mock, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_usajobs_multi_term_dedup(httpx_mock, monkeypatch):
+    """Each search term gets its own API call; duplicate URLs are deduplicated."""
+    monkeypatch.setenv("USAJOBS_API_KEY", "test-key")
+    monkeypatch.setenv("USAJOBS_EMAIL", "test@example.com")
+
+    response_a = {
+        "SearchResult": {
+            "SearchResultItems": [
+                {
+                    "MatchedObjectDescriptor": {
+                        "PositionTitle": "DevOps Engineer",
+                        "OrganizationName": "NASA",
+                        "PositionURI": "https://www.usajobs.gov/job/aaa",
+                        "PositionLocation": [],
+                        "PositionRemuneration": [],
+                        "PublicationStartDate": "2026-03-01",
+                    }
+                },
+            ],
+        }
+    }
+    response_b = {
+        "SearchResult": {
+            "SearchResultItems": [
+                {
+                    "MatchedObjectDescriptor": {
+                        "PositionTitle": "DevOps Engineer",
+                        "OrganizationName": "NASA",
+                        "PositionURI": "https://www.usajobs.gov/job/aaa",
+                        "PositionLocation": [],
+                        "PositionRemuneration": [],
+                        "PublicationStartDate": "2026-03-01",
+                    }
+                },
+                {
+                    "MatchedObjectDescriptor": {
+                        "PositionTitle": "SRE Lead",
+                        "OrganizationName": "DOE",
+                        "PositionURI": "https://www.usajobs.gov/job/bbb",
+                        "PositionLocation": [],
+                        "PositionRemuneration": [],
+                        "PublicationStartDate": "2026-03-02",
+                    }
+                },
+            ],
+        }
+    }
+
+    # Two search terms → two API calls, return different responses
+    httpx_mock.add_response(
+        url=re.compile(r"https://data\.usajobs\.gov/api/search\?.*"),
+        json=response_a,
+    )
+    httpx_mock.add_response(
+        url=re.compile(r"https://data\.usajobs\.gov/api/search\?.*"),
+        json=response_b,
+    )
+
+    scraper = USAJobsScraper(search_terms=["devops engineer", "SRE"])
+    jobs = await scraper.scrape()
+
+    # 3 total items across both responses, but 1 duplicate URL → 2 unique jobs
+    assert len(jobs) == 2
+    urls = [j.url for j in jobs]
+    assert "https://www.usajobs.gov/job/aaa" in urls
+    assert "https://www.usajobs.gov/job/bbb" in urls
+
+
+@pytest.mark.asyncio
 async def test_usajobs_no_api_key(httpx_mock):
     scraper = USAJobsScraper()
     jobs = await scraper.scrape()

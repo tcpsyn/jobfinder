@@ -66,6 +66,37 @@ async def test_himalayas_search_terms_filter(httpx_mock):
 
 
 @pytest.mark.asyncio
+async def test_himalayas_multi_word_search_matches(httpx_mock):
+    """Multi-word terms match when at least 2 words appear in the job text."""
+    httpx_mock.add_response(
+        url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), json=MOCK_RESPONSE
+    )
+    httpx_mock.add_response(
+        url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), json={"jobs": []}
+    )
+    # "devops engineer" — "devops" in categories, "engineer" in title → 2 matches → hit
+    scraper = HimalayasScraper(search_terms=["senior devops engineer remote"])
+    jobs = await scraper.scrape()
+    assert len(jobs) == 1
+    assert jobs[0].title == "Platform Engineer"
+
+
+@pytest.mark.asyncio
+async def test_himalayas_multi_word_search_no_match(httpx_mock):
+    """Multi-word terms fail when fewer than 2 words appear."""
+    httpx_mock.add_response(
+        url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), json=MOCK_RESPONSE
+    )
+    httpx_mock.add_response(
+        url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), json={"jobs": []}
+    )
+    # Only "scientist" matches Data Scientist, but "quantum" and "biology" don't → 1 match < 2
+    scraper = HimalayasScraper(search_terms=["quantum biology scientist"])
+    jobs = await scraper.scrape()
+    assert len(jobs) == 0
+
+
+@pytest.mark.asyncio
 async def test_himalayas_handles_empty(httpx_mock):
     httpx_mock.add_response(
         url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), json={"jobs": []}

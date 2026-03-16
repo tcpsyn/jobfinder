@@ -26,58 +26,62 @@ class USAJobsScraper(BaseScraper):
             "Host": "data.usajobs.gov",
         }
 
-        keyword = "information technology"
-        if self.search_terms:
-            keyword = " ".join(self.search_terms[:3])
+        keywords = list(self.search_terms[:6]) if self.search_terms else ["information technology"]
 
-        params = {
-            "Keyword": keyword,
-            "JobCategoryCode": "2210",
-            "RemoteIndicator": "True",
-            "ResultsPerPage": 50,
-        }
+        seen_urls: set[str] = set()
+        jobs: list[JobListing] = []
 
         try:
             async with self.get_client() as client:
-                resp = await client.get(API_URL, headers=headers, params=params)
-                resp.raise_for_status()
-                data = resp.json()
+                for keyword in keywords:
+                    params = {
+                        "Keyword": keyword,
+                        "JobCategoryCode": "2210",
+                        "RemoteIndicator": "True",
+                        "ResultsPerPage": 50,
+                    }
+                    resp = await client.get(API_URL, headers=headers, params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    results = data.get("SearchResult", {}).get("SearchResultItems", [])
+                    for item in results:
+                        match = item.get("MatchedObjectDescriptor", {})
+                        url = match.get("PositionURI", "")
+                        if url in seen_urls:
+                            continue
+                        seen_urls.add(url)
+
+                        position = match.get("PositionTitle", "")
+                        org = match.get("OrganizationName", "")
+                        desc = match.get("UserArea", {}).get("Details", {}).get("MajorDuties", [""])[0] if match.get("UserArea") else ""
+                        location_list = match.get("PositionLocation", [])
+                        location = location_list[0].get("LocationName", "Remote") if location_list else "Remote"
+
+                        salary_min = None
+                        salary_max = None
+                        remuneration = match.get("PositionRemuneration", [])
+                        if remuneration:
+                            salary_min = int(float(remuneration[0].get("MinimumRange", 0)))
+                            salary_max = int(float(remuneration[0].get("MaximumRange", 0)))
+
+                        posted_date = match.get("PublicationStartDate", None)
+
+                        jobs.append(
+                            JobListing(
+                                title=position,
+                                company=org,
+                                location=location,
+                                description=desc,
+                                url=url,
+                                source=self.source_name,
+                                salary_min=salary_min if salary_min else None,
+                                salary_max=salary_max if salary_max else None,
+                                posted_date=posted_date,
+                            )
+                        )
         except Exception as e:
             logger.error(f"USAJobs scrape failed: {e}")
             return []
-
-        jobs = []
-        results = data.get("SearchResult", {}).get("SearchResultItems", [])
-        for item in results:
-            match = item.get("MatchedObjectDescriptor", {})
-            position = match.get("PositionTitle", "")
-            org = match.get("OrganizationName", "")
-            desc = match.get("UserArea", {}).get("Details", {}).get("MajorDuties", [""])[0] if match.get("UserArea") else ""
-            url = match.get("PositionURI", "")
-            location_list = match.get("PositionLocation", [])
-            location = location_list[0].get("LocationName", "Remote") if location_list else "Remote"
-
-            salary_min = None
-            salary_max = None
-            remuneration = match.get("PositionRemuneration", [])
-            if remuneration:
-                salary_min = int(float(remuneration[0].get("MinimumRange", 0)))
-                salary_max = int(float(remuneration[0].get("MaximumRange", 0)))
-
-            posted_date = match.get("PublicationStartDate", None)
-
-            jobs.append(
-                JobListing(
-                    title=position,
-                    company=org,
-                    location=location,
-                    description=desc,
-                    url=url,
-                    source=self.source_name,
-                    salary_min=salary_min if salary_min else None,
-                    salary_max=salary_max if salary_max else None,
-                    posted_date=posted_date,
-                )
-            )
 
         return jobs
