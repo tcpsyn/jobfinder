@@ -207,6 +207,7 @@ function getRoute() {
     if (hash === '#/queue') return { view: 'queue' };
     if (hash === '#/network') return { view: 'network' };
     if (hash === '#/settings') return { view: 'settings' };
+    if (hash === '#/calculator') return { view: 'calculator' };
     return { view: 'feed' };
 }
 
@@ -224,6 +225,7 @@ function updateActiveNav() {
             (r === 'pipeline' && route.view === 'pipeline') ||
             (r === 'queue' && route.view === 'queue') ||
             (r === 'network' && route.view === 'network') ||
+            (r === 'calculator' && route.view === 'calculator') ||
             (r === 'settings' && route.view === 'settings')
         );
     });
@@ -246,6 +248,8 @@ async function handleRoute() {
         await renderNetwork(app);
     } else if (route.view === 'settings') {
         await renderSettings(app);
+    } else if (route.view === 'calculator') {
+        await renderSalaryCalculator(app);
     } else {
         await renderFeed(app);
     }

@@ -1394,6 +1394,181 @@ a:hover {
     white-space: pre-wrap;
 }
 
+/* === Salary Calculator === */
+.calc-toggle-group {
+    display: inline-flex;
+    background: var(--bg-surface-secondary);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    gap: 2px;
+}
+
+.calc-toggle-btn {
+    padding: 6px 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.calc-toggle-btn:hover {
+    color: var(--text-primary);
+}
+
+.calc-toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+}
+
+.calc-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.calc-input-group label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.calc-input-group input,
+.calc-input-group select {
+    padding: 10px 12px;
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    transition: border-color var(--transition);
+}
+
+.calc-input-group input:focus,
+.calc-input-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.calc-chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+.calc-chart-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+}
+
+.calc-chart-card h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+.calc-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.calc-stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
+    text-align: center;
+}
+
+.calc-stat-card .stat-number {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 6px;
+    animation: calcReveal 0.4s ease both;
+}
+
+.calc-stat-card .stat-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.calc-deductions-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+}
+
+.calc-deductions-panel.open {
+    max-height: 600px;
+}
+
+.calc-breakdown-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.calc-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.calc-breakdown-table th {
+    padding: 12px 16px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    border-bottom: 2px solid var(--border);
+    text-align: left;
+}
+
+.calc-breakdown-table td {
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.calc-breakdown-table tr:last-child td {
+    border-bottom: none;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.calc-breakdown-table tr:hover td {
+    background: var(--bg-surface-hover);
+}
+
+@keyframes calcReveal {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* === Responsive === */
 @media (max-width: 768px) {
     .navbar {
@@ -1459,10 +1634,28 @@ a:hover {
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
+
+    .calc-chart-row {
+        grid-template-columns: 1fr;
+    }
+
+    .calc-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .calc-breakdown-table th,
+    .calc-breakdown-table td {
+        padding: 10px 8px;
+        font-size: 0.8125rem;
+    }
 }
 
 @media (max-width: 480px) {
     .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .calc-stat-grid {
         grid-template-columns: 1fr;
     }
 
