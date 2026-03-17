@@ -30,7 +30,7 @@ DEFAULT_KEYWORDS = [
     "platform engineer remote",
 ]
 
-MAX_SEARCH_TERMS = 5
+MAX_SEARCH_TERMS = 10
 SEARCH_URL = "https://www.indeed.com/jobs"
 DOMAIN = "indeed"
 

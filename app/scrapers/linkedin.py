@@ -129,7 +129,7 @@ class LinkedInScraper(BaseScraper):
         return None, None
 
     async def scrape(self) -> list[JobListing]:
-        queries = self.search_terms[:5] if self.search_terms else [
+        queries = self.search_terms[:10] if self.search_terms else [
             "devops remote",
             "SRE remote",
             "platform engineer remote",

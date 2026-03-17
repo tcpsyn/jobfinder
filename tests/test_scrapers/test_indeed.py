@@ -213,8 +213,8 @@ async def test_indeed_salary_parsing():
 
 @pytest.mark.asyncio
 async def test_indeed_max_search_terms_constant():
-    """Verify MAX_SEARCH_TERMS is 5."""
-    assert MAX_SEARCH_TERMS == 5
+    """Verify MAX_SEARCH_TERMS is 10."""
+    assert MAX_SEARCH_TERMS == 10
 
 
 # ---------------------------------------------------------------------------

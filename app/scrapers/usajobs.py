@@ -26,7 +26,7 @@ class USAJobsScraper(BaseScraper):
             "Host": "data.usajobs.gov",
         }
 
-        keywords = list(self.search_terms[:6]) if self.search_terms else ["information technology"]
+        keywords = list(self.search_terms[:10]) if self.search_terms else ["information technology"]
 
         seen_urls: set[str] = set()
         jobs: list[JobListing] = []

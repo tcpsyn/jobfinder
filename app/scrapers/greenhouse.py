@@ -5,7 +5,7 @@ from app.scrapers.base import BaseScraper, JobListing
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://boards-api.greenhouse.io/v1/boards"
-MIN_WORD_MATCHES = 2
+MIN_WORD_MATCHES = 3
 MAX_DETAIL_FETCHES = 30
 
 DEFAULT_COMPANIES = [
@@ -69,13 +69,18 @@ class GreenhouseScraper(BaseScraper):
             return list(custom)
         return DEFAULT_COMPANIES
 
-    def _matches_search(self, searchable: str) -> bool:
+    def _matches_search(self, title: str, searchable: str) -> bool:
         for term in self.search_terms:
             words = term.lower().split()
-            threshold = min(len(words), MIN_WORD_MATCHES)
-            matched = sum(1 for w in words if w in searchable)
-            if matched >= threshold:
-                return True
+            if len(words) <= 1:
+                # Single-word terms must match in the title, not just the description
+                if words and words[0] in title.lower():
+                    return True
+            else:
+                threshold = min(len(words), MIN_WORD_MATCHES)
+                matched = sum(1 for w in words if w in searchable)
+                if matched >= threshold:
+                    return True
         return False
 
     async def scrape(self) -> list[JobListing]:
@@ -115,7 +120,7 @@ class GreenhouseScraper(BaseScraper):
                     seen_urls.add(job_url)
 
                     searchable = f"{title} {content} {location_name}".lower()
-                    if self.search_terms and not self._matches_search(searchable):
+                    if self.search_terms and not self._matches_search(title, searchable):
                         continue
 
                     metadata = item.get("metadata", [])

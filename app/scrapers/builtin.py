@@ -37,7 +37,7 @@ class BuiltInScraper(BaseScraper):
 
         if not matched:
             # Use search URL with query
-            return [f"/jobs?search={quote_plus(term)}&remote=true" for term in self.search_terms[:3]]
+            return [f"/jobs?search={quote_plus(term)}&remote=true" for term in self.search_terms[:5]]
 
         return matched
 

@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 API_URL = "https://api.adzuna.com/v1/api/jobs/us/search/{page}"
 MAX_PAGES = 3
 PAGE_SIZE = 50
-MAX_TERMS = 5
+MAX_TERMS = 10
 MIN_WORD_MATCHES = 2
 
 
