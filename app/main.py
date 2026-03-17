@@ -224,9 +224,11 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
         (r"\bmiddle[\s_-]?name\b", profile.get("middle_name", ""), "fill_text"),
         # Email
         (r"\bemail\b", profile.get("email", ""), "fill_text"),
-        # Phone
-        (r"\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b", profile.get("phone", ""), "fill_text"),
-        (r"\bphone[\s_-]?country[\s_-]?code\b|\bcountry[\s_-]?code\b", profile.get("phone_country_code", "+1"), "fill_text"),
+        # Phone (exclude "extension" fields)
+        (r"(?!.*\bextension\b).*(\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b)", profile.get("phone", ""), "fill_text"),
+        (r"\bphone[\s_-]?country[\s_-]?code\b|\bcountry[\s_-]?code\b|\bcountry[\s_-]?phone\b", profile.get("phone_country_code", "+1"), "fill_text"),
+        # Phone extension — skip (user typically doesn't have one)
+        (r"\bphone[\s_-]?ext(ension)?\b|\bext(ension)?\b", "", "skip"),
         # Address
         (r"\baddress[\s_-]?line[\s_-]?1\b|\bstreet[\s_-]?address\b|\baddress[\s_-]?1\b", profile.get("address_street1", ""), "fill_text"),
         (r"\baddress[\s_-]?line[\s_-]?2\b|\bapt\b|\bsuite\b|\baddress[\s_-]?2\b", profile.get("address_street2", ""), "fill_text"),
@@ -246,7 +248,7 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
         # Salary
         (r"\bsalary\b|\bcompensation\b|\bdesired[\s_-]?pay\b", str(profile.get("desired_salary_min", "")), "fill_text"),
         # How heard
-        (r"\bhow[\s_-]?did[\s_-]?you[\s_-]?(hear|find|learn)\b|\breferral[\s_-]?source\b", profile.get("how_heard_default", "Online Job Board"), None),
+        (r"\bhow[\s_-]?did[\s_-]?you[\s_-]?(hear|find|learn)\b|\breferral[\s_-]?source\b|\bhow.{0,10}hear\b|\bsource\b.*\bhear\b|\bhear.{0,10}about\b", profile.get("how_heard_default", "Online Job Board"), None),
         # Date of birth
         (r"\bdate[\s_-]?of[\s_-]?birth\b|\bbirthday\b|\bdob\b", profile.get("date_of_birth", ""), "fill_text"),
     ]
@@ -265,7 +267,7 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
 
         matched = False
         for pattern, value, action in rules:
-            if not value:
+            if not value and action != "skip":
                 continue
             if _re.search(pattern, searchable, _re.IGNORECASE):
                 tag = field.get("tag", "").lower()

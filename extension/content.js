@@ -814,6 +814,13 @@
     optionEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     optionEl.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
     optionEl.click();
+    // Close any lingering dropdowns after selection
+    setTimeout(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true })
+      );
+      document.body.click();
+    }, 200);
   }
 
   // ─── Typeahead handling ────────────────────────────────────
