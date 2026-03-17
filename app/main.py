@@ -202,6 +202,15 @@ async def lifespan(app: FastAPI):
 import re as _re
 
 
+def _is_excluded(pattern: str, searchable: str) -> bool:
+    """Check if a field should be excluded from a pattern match based on context."""
+    s = searchable.lower()
+    # Phone number pattern should not match country code or extension fields
+    if "phone" in pattern and ("country" in s or "code" in s or "extension" in s):
+        return True
+    return False
+
+
 def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], list[dict]]:
     """Match common form fields to profile data without AI. Returns (mappings, remaining_fields)."""
     if not fields or not profile:
@@ -224,8 +233,8 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
         (r"\bmiddle[\s_-]?name\b", profile.get("middle_name", ""), "fill_text"),
         # Email
         (r"\bemail\b", profile.get("email", ""), "fill_text"),
-        # Phone (exclude "extension" fields)
-        (r"(?!.*\bextension\b).*(\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b)", profile.get("phone", ""), "fill_text"),
+        # Phone number
+        (r"\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b", profile.get("phone", ""), "fill_text"),
         (r"\bphone[\s_-]?country[\s_-]?code\b|\bcountry[\s_-]?code\b|\bcountry[\s_-]?phone\b", profile.get("address_country_name", "United States") + " (" + profile.get("phone_country_code", "+1") + ")", "select_dropdown_safe"),
         # Phone extension — skip (user typically doesn't have one)
         (r"\bphone[\s_-]?ext(ension)?\b|\bext(ension)?\b", "", "skip"),
@@ -274,7 +283,8 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
         for pattern, value, action in rules:
             if not value and action != "skip":
                 continue
-            if _re.search(pattern, searchable, _re.IGNORECASE):
+            # Check for explicit exclusions before matching
+            if _re.search(pattern, searchable, _re.IGNORECASE) and not _is_excluded(pattern, searchable):
                 tag = field.get("tag", "").lower()
                 # Determine action based on field type
                 if action is None:

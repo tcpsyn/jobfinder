@@ -235,7 +235,7 @@
     const fields = [];
     const seen = new Set();
 
-    const selectors = 'input, select, textarea, [contenteditable="true"], [role="combobox"], [role="textbox"], [role="spinbutton"]';
+    const selectors = 'input, select, textarea, [contenteditable="true"], [role="combobox"], [role="textbox"], [role="spinbutton"], button[aria-haspopup="listbox"], [role="button"][aria-haspopup="listbox"], [data-automation-id*="select"], [data-automation-id*="dropdown"]';
 
     // Search both light DOM and shadow DOM
     const elements = deepQuerySelectorAll(root, selectors);
