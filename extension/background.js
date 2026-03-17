@@ -44,10 +44,12 @@ async function getFullProfile() {
   }
 }
 
-async function analyzeForm(formHtml, adapterFields) {
+async function analyzeForm(formHtml, adapterFields, structuredFields) {
   try {
     const payload = { form_html: formHtml };
-    if (adapterFields?.length) {
+    if (structuredFields?.length) {
+      payload.fields = structuredFields;
+    } else if (adapterFields?.length) {
       payload.fields = adapterFields;
     }
     const resp = await apiFetch('/api/autofill/analyze', {
@@ -313,7 +315,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'getFullProfile':
           return await getFullProfile();
         case 'analyzeForm':
-          return await analyzeForm(message.formHtml, message.adapterFields);
+          return await analyzeForm(message.formHtml, message.adapterFields, message.structuredFields);
         case 'getResumeForJob':
           return await getResumeForJob(message.jobId);
         case 'saveLearnedData':

@@ -2011,8 +2011,12 @@
           } catch { /* skip */ }
         }
 
+        // Extract structured fields for more reliable AI analysis
+        const formRoot = atsAdapter?.getFormRoot?.(document) || null;
+        const structuredFields = extractFormData(formRoot);
+
         // Include ATS metadata in the analysis request
-        const analyzePayload = { type: 'analyzeForm', formHtml };
+        const analyzePayload = { type: 'analyzeForm', formHtml, structuredFields };
         if (atsAdapter) {
           analyzePayload.atsName = atsAdapter.name;
           analyzePayload.atsFieldMap = atsAdapter.getFieldMap?.() || {};

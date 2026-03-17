@@ -256,6 +256,7 @@ def _build_form_analysis_prompt(
     fields_summary: str,
     form_html: str,
     page_url: str,
+    profile: dict | None = None,
 ) -> str:
     """Build the AI prompt for form field analysis and autofill mapping."""
 
@@ -266,17 +267,30 @@ def _build_form_analysis_prompt(
     else:
         fields_section = ""
 
-    if form_html:
+    # Only include raw HTML if structured fields aren't available
+    if form_html and not fields_summary:
         html_section = f"""RAW FORM HTML (use for additional context — labels, grouping, nearby text):
-{form_html[:8000]}"""
+{form_html[:4000]}"""
     else:
         html_section = ""
 
-    prompt = f"""You are a job application autofill assistant. Map form fields to the user's REAL profile data below.
+    # Extract key values inline so the model can't miss them
+    p = profile or {}
+    full_name = p.get("full_name", "")
+    name_parts = full_name.split(None, 1) if full_name else ["", ""]
+    first_name = name_parts[0] if len(name_parts) > 0 else ""
+    last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-CRITICAL: You MUST use the EXACT values from the USER PROFILE DATA below. NEVER use placeholder data like "John Doe", "123 Main St", "Anytown", or "10001". The user's real information is provided — use it.
+    quick_ref = f"""IMPORTANT — The user's name is {full_name}. First name: {first_name}. Last name: {last_name}.
+Email: {p.get('email', '')}. Phone: {p.get('phone_country_code', '')} {p.get('phone', '')}.
+Address: {p.get('address_street1', '')}, {p.get('address_city', '')}, {p.get('address_state', '')} {p.get('address_zip', '')}, {p.get('address_country_name', '')}.
+NEVER use "John Doe", "123 Main St", "Anytown", or any placeholder. Use ONLY the values above."""
 
-=== USER PROFILE DATA (use these EXACT values) ===
+    prompt = f"""You are a job application autofill assistant. Map form fields to the user's profile data.
+
+{quick_ref}
+
+=== FULL PROFILE DATA ===
 {profile_summary}
 
 === CUSTOM Q&A BANK ===
@@ -2067,11 +2081,12 @@ Rank by ROI (jobs unlocked relative to learning difficulty). Return top 5 skills
             fields_summary=fields_summary,
             form_html=form_html,
             page_url=page_url,
+            profile=profile,
         )
 
         try:
             response = await asyncio.wait_for(
-                client.chat(prompt, max_tokens=4000),
+                client.chat(prompt, max_tokens=2000),
                 timeout=AUTOFILL_ANALYZE_TIMEOUT,
             )
             text = response.strip()
