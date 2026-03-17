@@ -771,23 +771,53 @@
   }
 
   async function handleCustomDropdown(el, value, fieldHints) {
+    // Snapshot existing visible listboxes BEFORE clicking, so we can find the new one
+    const preExisting = new Set();
+    try {
+      for (const lb of document.querySelectorAll('[role="listbox"]')) {
+        const rect = lb.getBoundingClientRect();
+        if (rect.height > 0 && rect.width > 0) preExisting.add(lb);
+      }
+    } catch { /* skip */ }
+
     // Click to open the dropdown
     el.click();
     dispatchEvents(el, ['click', 'focus']);
-    await sleep(300);
 
-    // Look for the dropdown that appeared
-    const dropdown = findTypeaheadDropdown(el);
-    if (!dropdown) {
-      // Try clicking a child button/arrow that might open it
-      const trigger = el.querySelector('button, [class*="arrow"], [class*="indicator"], [class*="toggle"]');
-      if (trigger) {
-        trigger.click();
-        await sleep(300);
+    // Wait for the new dropdown to appear (retry with increasing delays)
+    let dd = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await sleep(attempt < 2 ? 200 : 300);
+
+      // Prefer newly-appeared listboxes (not in the pre-existing set)
+      try {
+        for (const lb of document.querySelectorAll('[role="listbox"]')) {
+          const rect = lb.getBoundingClientRect();
+          if (rect.height > 0 && rect.width > 0 && !preExisting.has(lb)) {
+            const opts = lb.querySelectorAll('[role="option"], [data-automation-id="promptOption"]');
+            if (opts.length > 1) { dd = lb; break; }
+          }
+        }
+      } catch { /* skip */ }
+
+      if (dd) break;
+
+      // Fallback: use findTypeaheadDropdown but prefer listboxes with multiple options
+      const candidate = findTypeaheadDropdown(el);
+      if (candidate) {
+        const opts = getDropdownOptions(candidate);
+        if (opts.length > 1) { dd = candidate; break; }
+      }
+
+      // On first failure, try clicking a child trigger
+      if (attempt === 1) {
+        const trigger = el.querySelector('button, [class*="arrow"], [class*="indicator"], [class*="toggle"]');
+        if (trigger && trigger !== el) {
+          trigger.click();
+        }
       }
     }
 
-    const dd = dropdown || findTypeaheadDropdown(el);
     if (!dd) {
       closeOpenDropdowns();
       return { success: false, reason: 'no dropdown appeared' };
@@ -801,7 +831,7 @@
 
     // Try typing to filter first (for searchable dropdowns)
     // Workday uses [data-automation-id="searchBox"] for dropdown search inputs
-    const searchInput = dd.querySelector('[data-automation-id="searchBox"]') || dd.querySelector('input') || el.querySelector('input');
+    const searchInput = dd.querySelector('[data-automation-id="searchBox"]') || dd.querySelector('input');
     if (searchInput) {
       searchInput.focus();
       setNativeValue(searchInput, value);
