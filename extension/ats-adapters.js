@@ -40,6 +40,7 @@
         '[data-automation-id="addressSection_addressLine1"]': 'address_line_1',
         '[data-automation-id="addressSection_city"]': 'city',
         '[data-automation-id="addressSection_countryRegion"]': 'country',
+        '[data-automation-id="addressSection_stateProvince"]': 'state',
         '[data-automation-id="addressSection_postalCode"]': 'postal_code',
         '[data-automation-id="phone-number"]': 'phone',
         '[data-automation-id="email"]': 'email',

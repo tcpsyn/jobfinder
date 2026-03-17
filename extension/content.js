@@ -235,7 +235,7 @@
     const fields = [];
     const seen = new Set();
 
-    const selectors = 'input, select, textarea, [contenteditable="true"], [role="combobox"], [role="textbox"], [role="spinbutton"], button[aria-haspopup="listbox"], [role="button"][aria-haspopup="listbox"], [data-automation-id*="select"], [data-automation-id*="dropdown"]';
+    const selectors = 'input, select, textarea, [contenteditable="true"], [role="combobox"], [role="textbox"], [role="spinbutton"], button[aria-haspopup], [role="button"][aria-haspopup], [data-automation-id][aria-haspopup], [data-automation-id*="select"], [data-automation-id*="dropdown"], [data-automation-id*="stateProvince"], [data-automation-id*="countryRegion"]';
 
     // Search both light DOM and shadow DOM
     const elements = deepQuerySelectorAll(root, selectors);
@@ -254,7 +254,10 @@
     for (const el of elements) {
       try {
         const type = (el.type || '').toLowerCase();
-        if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'image') continue;
+        if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'image') {
+          // Don't skip dropdown trigger elements (e.g., Workday button dropdowns)
+          if (!el.hasAttribute('aria-haspopup')) continue;
+        }
         if (el.disabled) continue;
 
         // Skip our own overlay/badge elements
@@ -1197,7 +1200,31 @@
           // For 'select_dropdown_safe': check if the field already contains the
           // desired value before interacting — avoids opening dropdowns unnecessarily
           if (action === 'select_dropdown_safe') {
-            const container = el.closest('[data-automation-id], [class*="combobox"], [role="combobox"], [role="listbox"]') || el.parentElement;
+            let container = el.closest('[data-automation-id], [class*="combobox"], [role="combobox"], [role="listbox"]') || el.parentElement;
+            // Walk up to find chip/pill/tag elements that indicate an already-selected value
+            // (e.g., Workday shows "× United States of America (+1)" as a chip)
+            let searchEl = container;
+            for (let i = 0; i < 5 && searchEl && searchEl !== document.body; i++) {
+              // Check for chip elements by selector
+              const hasChip = searchEl.querySelector(
+                '[data-automation-id*="delete"], [data-automation-id*="Delete"], ' +
+                '[data-automation-id*="selectedItem"], [data-automation-id*="SelectedItem"], ' +
+                '[class*="chip"], [class*="pill"], [class*="tag-item"], ' +
+                '[aria-selected="true"]'
+              );
+              if (hasChip) {
+                container = searchEl;
+                break;
+              }
+              // Also detect chips by text pattern: "×" or "✕" followed by a value
+              // (Workday renders chips as plain elements with a close button + text)
+              const childText = searchEl.textContent || '';
+              if (/[\u00d7\u2715\u2716\u2717\u2718×✕✖]\s*\S/.test(childText)) {
+                container = searchEl;
+                break;
+              }
+              searchEl = searchEl.parentElement;
+            }
             const existingText = (container?.textContent || el.value || '').toLowerCase();
             const valueLower = value.toLowerCase();
             // Check if the value (or a key part) is already present

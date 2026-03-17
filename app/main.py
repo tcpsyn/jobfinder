@@ -202,12 +202,20 @@ async def lifespan(app: FastAPI):
 import re as _re
 
 
-def _is_excluded(pattern: str, searchable: str) -> bool:
+def _is_excluded(pattern: str, searchable: str, field_id: str = "") -> bool:
     """Check if a field should be excluded from a pattern match based on context."""
     s = searchable.lower()
+    fid = field_id.lower()
     # Phone number pattern should not match country code or extension fields
-    if "phone" in pattern and ("country" in s or "code" in s or "extension" in s):
-        return True
+    if "phone" in pattern and "country" not in pattern:
+        # Check field_id first — most reliable signal
+        # e.g. countryPhoneCode, phone-country-code, phoneDeviceType
+        if _re.search(r"country|code|device.?type|extension", fid):
+            return True
+        # Check searchable for compound country-code terms (not bare "country"/"code"
+        # which could appear in unrelated context like "country" address section)
+        if _re.search(r"country\s*(?:phone\s*)?code|phone\s*country|phone\s*ext|device\s*type", s):
+            return True
     return False
 
 
@@ -233,11 +241,13 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
         (r"\bmiddle[\s_-]?name\b", profile.get("middle_name", ""), "fill_text"),
         # Email
         (r"\bemail\b", profile.get("email", ""), "fill_text"),
-        # Phone number
-        (r"\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b", profile.get("phone", ""), "fill_text"),
+        # Phone — country code and extension checked BEFORE phone number to avoid
+        # fields like "phoneNumber--countryPhoneCode" matching the phone pattern first
         (r"\bphone[\s_-]?country[\s_-]?code\b|\bcountry[\s_-]?code\b|\bcountry[\s_-]?phone\b", profile.get("address_country_name", "United States") + " (" + profile.get("phone_country_code", "+1") + ")", "select_dropdown_safe"),
         # Phone extension — skip (user typically doesn't have one)
         (r"\bphone[\s_-]?ext(ension)?\b|\bext(ension)?\b", "", "skip"),
+        # Phone number
+        (r"\bphone[\s_-]?number\b|\bmobile\b|\bcell\b|\btelephone\b", profile.get("phone", ""), "fill_text"),
         # Address
         (r"\baddress[\s_-]?line[\s_-]?1\b|\bstreet[\s_-]?address\b|\baddress[\s_-]?1\b", profile.get("address_street1", ""), "fill_text"),
         (r"\baddress[\s_-]?line[\s_-]?2\b|\bapt\b|\bsuite\b|\baddress[\s_-]?2\b", profile.get("address_street2", ""), "fill_text"),
@@ -284,7 +294,7 @@ def _deterministic_fill(fields: list[dict], profile: dict) -> tuple[list[dict], 
             if not value and action != "skip":
                 continue
             # Check for explicit exclusions before matching
-            if _re.search(pattern, searchable, _re.IGNORECASE) and not _is_excluded(pattern, searchable):
+            if _re.search(pattern, searchable, _re.IGNORECASE) and not _is_excluded(pattern, searchable, field_id):
                 tag = field.get("tag", "").lower()
                 # Determine action based on field type
                 if action is None:
