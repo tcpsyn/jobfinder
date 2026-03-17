@@ -2072,6 +2072,14 @@
         // Extract structured fields for more reliable AI analysis
         const structuredFields = extractFormData(formRoot);
 
+        // Debug: log extracted fields so we can diagnose fill issues
+        console.log('[CareerPulse] Extracted fields:', structuredFields.map(f => ({
+          selector: f.selector, tag: f.tag, type: f.type, label: f.label,
+          name: f.name, role: f.role, currentValue: f.currentValue,
+          hasOptions: !!(f.options && f.options.length),
+          optionCount: f.options?.length || 0,
+        })));
+
         // Include ATS metadata in the analysis request
         const analyzePayload = { type: 'analyzeForm', formHtml, structuredFields };
         if (atsAdapter) {
@@ -2093,6 +2101,8 @@
           updateOverlay('error', `Timed out analyzing form. Is the server running?`);
           return;
         }
+
+        console.log('[CareerPulse] Analyze response:', JSON.stringify(response?.data?.mappings || [], null, 2));
 
         if (!response || !response.ok) {
           updateOverlay('error', `Error: ${response?.error || 'Analysis failed'}`);
