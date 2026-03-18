@@ -3,6 +3,8 @@ import logging
 import re
 from urllib.parse import quote_plus, urlencode
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -74,10 +76,8 @@ class DiceScraper(BaseScraper):
     def _parse_salary(self, salary_str: str) -> tuple[int | None, int | None]:
         if not salary_str:
             return None, None
-        # Remove extra $ signs and parse "$$60,000 - $65,000" or "$150,000"
-        numbers = re.findall(r"[\d,]+", salary_str.replace(",", ""))
-        if not numbers:
-            numbers = re.findall(r"[\d,]+", salary_str)
+        # Extract all number sequences (with or without commas)
+        numbers = re.findall(r"[\d,]+", salary_str)
         clean_numbers = []
         for n in numbers:
             n = n.replace(",", "")
@@ -104,9 +104,12 @@ class DiceScraper(BaseScraper):
                     url = f"{self.BASE_URL}?{urlencode(params)}"
 
                     try:
-                        resp = await client.get(url)
+                        resp = await self.rate_limited_get(client, url)
                         resp.raise_for_status()
-                    except Exception as e:
+                    except httpx.HTTPStatusError as e:
+                        logger.error(f"Dice HTTP {e.response.status_code} for '{query}' page {page}")
+                        continue
+                    except (httpx.TimeoutException, httpx.ConnectError) as e:
                         logger.error(f"Dice fetch failed for '{query}' page {page}: {e}")
                         continue
 

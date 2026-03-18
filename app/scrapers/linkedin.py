@@ -2,6 +2,7 @@ import logging
 import re
 from urllib.parse import urlencode
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
@@ -50,10 +51,25 @@ class LinkedInScraper(BaseScraper):
         url = f"{self.BASE_URL}?{urlencode(params)}"
 
         try:
-            resp = await client.get(url)
+            resp = await self.rate_limited_get(client, url)
             resp.raise_for_status()
-        except Exception as e:
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                logger.warning(f"LinkedIn rate limited (429) for '{query}' start={start}")
+            elif status == 403:
+                logger.warning(f"LinkedIn blocked (403) for '{query}' start={start} — possible CAPTCHA")
+            else:
+                logger.error(f"LinkedIn HTTP {status} for '{query}' start={start}")
+            return []
+        except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"LinkedIn fetch failed for '{query}' start={start}: {e}")
+            return []
+
+        html_text = resp.text
+        # CAPTCHA / challenge detection
+        if len(html_text) < 2000 or "captcha" in html_text.lower() or "authwall" in html_text.lower():
+            logger.warning(f"LinkedIn CAPTCHA/authwall detected for '{query}' start={start}")
             return []
 
         soup = BeautifulSoup(resp.content, "html.parser")

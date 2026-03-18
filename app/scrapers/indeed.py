@@ -4,6 +4,7 @@ import logging
 import random
 from urllib.parse import quote_plus
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
@@ -162,9 +163,14 @@ class IndeedScraper(BaseScraper):
     def _is_blocked(html: str) -> bool:
         """Detect if the response is a captcha/challenge page."""
         if len(html) < 1000:
+            logger.warning("Indeed: response too short (%d chars), likely blocked", len(html))
             return True
         lower = html.lower()
-        return "captcha" in lower or "cf-challenge" in lower or "just a moment" in lower
+        blocked = "captcha" in lower or "cf-challenge" in lower or "just a moment" in lower
+        if blocked:
+            reason = "captcha" if "captcha" in lower else "cf-challenge" if "cf-challenge" in lower else "cloudflare"
+            logger.warning("Indeed: CAPTCHA/challenge detected (type: %s)", reason)
+        return blocked
 
     async def _scrape_with_playwright(self, keywords: list[str]) -> list[dict]:
         """Scrape Indeed using Playwright with stealth and cookie persistence."""
@@ -241,7 +247,7 @@ class IndeedScraper(BaseScraper):
                 try:
                     resp = await self.rate_limited_get(client, url)
                     resp.raise_for_status()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.warning(f"Indeed httpx scrape failed for '{keyword}': {e}")
                     continue
 

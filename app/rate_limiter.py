@@ -39,9 +39,29 @@ class AsyncRateLimiter:
 
 _limiters: dict[str, AsyncRateLimiter] = {}
 
+# Per-domain rate limits: (requests, per_seconds)
+# More aggressive sites get slower limits
 DOMAIN_LIMITS: dict[str, tuple[float, float]] = {
     "linkedin.com": (1.0, 3.0),
     "www.linkedin.com": (1.0, 3.0),
+    "www.dice.com": (1.0, 2.0),
+    "dice.com": (1.0, 2.0),
+    "www.indeed.com": (1.0, 2.0),
+    "indeed.com": (1.0, 2.0),
+    "wellfound.com": (1.0, 3.0),
+    "builtin.com": (1.0, 2.0),
+    "www.builtin.com": (1.0, 2.0),
+    "boards-api.greenhouse.io": (2.0, 1.0),
+    "hn.algolia.com": (2.0, 1.0),
+    "hacker-news.firebaseio.com": (5.0, 1.0),
+    "data.usajobs.gov": (1.0, 1.0),
+    "api.adzuna.com": (1.0, 1.0),
+    "himalayas.app": (2.0, 1.0),
+    "remotive.com": (2.0, 1.0),
+    "remoteok.com": (1.0, 1.0),
+    "www.arbeitnow.com": (2.0, 1.0),
+    "jobicy.com": (2.0, 1.0),
+    "weworkremotely.com": (2.0, 1.0),
 }
 
 DEFAULT_RATE = 1.0

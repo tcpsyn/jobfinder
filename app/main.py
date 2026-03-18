@@ -102,39 +102,63 @@ async def lifespan(app: FastAPI):
         scheduler = AsyncIOScheduler()
 
         async def scheduled_scrape():
-            db = app.state.db
-            config = await db.get_search_config()
-            terms = config["search_terms"] if config else []
-            keys = await db.get_scraper_keys()
-            scrapers = [s(search_terms=terms, scraper_keys=keys) for s in ALL_SCRAPERS]
-            await run_scrape_cycle(db, scrapers, search_terms=terms, scraper_keys=keys)
+            try:
+                db = app.state.db
+                config = await db.get_search_config()
+                terms = config["search_terms"] if config else []
+                keys = await db.get_scraper_keys()
+                scrapers = [s(search_terms=terms, scraper_keys=keys) for s in ALL_SCRAPERS]
+                await run_scrape_cycle(db, scrapers, search_terms=terms, scraper_keys=keys)
+            except Exception:
+                logger.exception("Scheduled scrape failed")
 
         async def scheduled_enrichment():
-            await run_enrichment_cycle(app.state.db)
+            try:
+                await run_enrichment_cycle(app.state.db)
+            except Exception:
+                logger.exception("Scheduled enrichment failed")
 
         async def scheduled_scoring():
-            await app.state.score_unscored(app.state.db)
+            try:
+                await app.state.score_unscored(app.state.db)
+            except Exception:
+                logger.exception("Scheduled scoring failed")
 
         async def scheduled_maintenance():
-            await run_maintenance_cycle(app.state.db)
+            try:
+                await run_maintenance_cycle(app.state.db)
+            except Exception:
+                logger.exception("Scheduled maintenance failed")
 
         async def scheduled_reminder_check():
-            due = await run_reminder_check(app.state.db, embedding_client=app.state.embedding_client)
-            for r in due:
-                await app.state.db.add_event(
-                    r["job_id"], "reminder_due",
-                    f"Follow-up reminder due for {r.get('company', 'unknown')}"
-                )
+            try:
+                due = await run_reminder_check(app.state.db, embedding_client=app.state.embedding_client)
+                for r in due:
+                    await app.state.db.add_event(
+                        r["job_id"], "reminder_due",
+                        f"Follow-up reminder due for {r.get('company', 'unknown')}"
+                    )
+            except Exception:
+                logger.exception("Scheduled reminder check failed")
 
         async def scheduled_digest():
-            await run_digest_cycle(app.state.db)
+            try:
+                await run_digest_cycle(app.state.db)
+            except Exception:
+                logger.exception("Scheduled digest failed")
 
         async def scheduled_alert_check():
-            await run_alert_check(app.state.db)
+            try:
+                await run_alert_check(app.state.db)
+            except Exception:
+                logger.exception("Scheduled alert check failed")
 
         async def scheduled_embedding():
-            await run_job_embedding_cycle(app.state.db, app.state.embedding_client)
-            await run_context_embedding_cycle(app.state.db, app.state.embedding_client)
+            try:
+                await run_job_embedding_cycle(app.state.db, app.state.embedding_client)
+                await run_context_embedding_cycle(app.state.db, app.state.embedding_client)
+            except Exception:
+                logger.exception("Scheduled embedding failed")
 
         scheduler.add_job(
             scheduled_scrape, "interval",
@@ -206,17 +230,19 @@ def create_app(db_path: str = "data/jobfinder.db", testing: bool = False) -> Fas
     app.state.scoring_lock = asyncio.Lock()
     app.state.scrape_lock = asyncio.Lock()
     app.state.notification_subscribers: list[asyncio.Queue] = []
+    app.state.notification_lock = asyncio.Lock()
     app.state.queue_subscribers: list[asyncio.Queue] = []
     app.state.alert_threshold = 80
 
     # --- Shared helpers attached to app.state for router access ---
 
     async def _broadcast_notification(notification: dict):
-        for queue in list(app.state.notification_subscribers):
-            try:
-                queue.put_nowait(notification)
-            except asyncio.QueueFull:
-                pass
+        async with app.state.notification_lock:
+            for queue in list(app.state.notification_subscribers):
+                try:
+                    queue.put_nowait(notification)
+                except asyncio.QueueFull:
+                    pass
 
     async def _check_high_score_alerts(db, job_id: int, score: int, job_title: str, company: str):
         if score >= app.state.alert_threshold:

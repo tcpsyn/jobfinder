@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -15,10 +17,10 @@ class ArbeitnowScraper(BaseScraper):
         async with self.get_client() as client:
             for page in range(1, 4):
                 try:
-                    resp = await client.get(API_URL, params={"page": page})
+                    resp = await self.rate_limited_get(client, API_URL, params={"page": page})
                     resp.raise_for_status()
                     data = resp.json()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"Arbeitnow scrape failed page {page}: {e}")
                     break
 

@@ -149,10 +149,13 @@ async def test_usajobs_no_api_key(httpx_mock):
 async def test_usajobs_handles_error(httpx_mock, monkeypatch):
     monkeypatch.setenv("USAJOBS_API_KEY", "test-key")
     monkeypatch.setenv("USAJOBS_EMAIL", "test@example.com")
-    httpx_mock.add_response(
-        url=re.compile(r"https://data\.usajobs\.gov/api/search\?.*"),
-        status_code=500,
-    )
+    # 3 responses for retry attempts (max_retries=3)
+    for _ in range(3):
+        httpx_mock.add_response(
+            url=re.compile(r"https://data\.usajobs\.gov/api/search\?.*"),
+            status_code=500,
+        )
     scraper = USAJobsScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []

@@ -185,6 +185,20 @@ async def export_csv(
 ):
     db = request.app.state.db
     jobs = await db.list_jobs(sort_by="score", limit=10000)
+
+    # Prefetch all sources and applications to avoid N+1
+    all_sources_cursor = await db.db.execute(
+        "SELECT job_id, source_name FROM sources")
+    all_sources = await all_sources_cursor.fetchall()
+    sources_by_job = {}
+    for row in all_sources:
+        sources_by_job.setdefault(row[0], []).append(row[1])
+
+    all_apps_cursor = await db.db.execute(
+        "SELECT job_id, applied_at FROM applications")
+    all_apps = await all_apps_cursor.fetchall()
+    apps_by_job = {row[0]: row[1] for row in all_apps}
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
@@ -199,16 +213,15 @@ async def export_csv(
         score = job.get("match_score") or 0
         if min_score and score < min_score:
             continue
-        sources = await db.get_sources(job["id"])
-        source_names = ", ".join(s["source_name"] for s in sources)
-        application = await db.get_application(job["id"])
+        source_names = ", ".join(sources_by_job.get(job["id"], []))
+        applied_at = apps_by_job.get(job["id"], "")
         writer.writerow([
             job["title"], job["company"], job.get("location", ""),
             job.get("match_score", ""), app_row,
             job.get("salary_min", ""), job.get("salary_max", ""),
             job["url"], job.get("posted_date", ""),
             job.get("contact_email", ""),
-            application.get("applied_at", "") if application else "",
+            applied_at or "",
             source_names,
         ])
     return Response(

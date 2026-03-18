@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -27,10 +29,10 @@ class RemotiveScraper(BaseScraper):
         async with self.get_client() as client:
             for category in categories:
                 try:
-                    resp = await client.get(API_URL, params={"category": category, "limit": 50})
+                    resp = await self.rate_limited_get(client, API_URL, params={"category": category, "limit": 50})
                     resp.raise_for_status()
                     data = resp.json()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"Remotive scrape failed for {category}: {e}")
                     continue
 

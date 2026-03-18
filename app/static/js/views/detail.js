@@ -58,7 +58,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const staleWarning = freshness && freshness.class === 'freshness-stale' ? '<span style="font-size:0.8125rem;color:#ef4444;">This listing may be expired.</span>' : '';
 
     const descriptionContent = job.description
-        ? (job.description.includes('<') && job.description.includes('>') ? job.description : `<p>${escapeHtml(job.description).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`)
+        ? (job.description.includes('<') && job.description.includes('>') ? sanitizeHtml(job.description) : `<p>${escapeHtml(job.description).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>')}</p>`)
         : '<p class="text-tertiary">No description available.</p>';
 
     const appStatus = application?.status || 'interested';
@@ -74,7 +74,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
                 <span>${formatDate(job.posted_date || job.created_at)}</span>
                 ${freshnessHtml}
                 ${staleWarning}
-                ${sources.map(s => `<a href="${escapeHtml(s.source_url || job.url)}" target="_blank" class="source-tag">${escapeHtml(s.source_name)}</a>`).join('')}
+                ${sources.map(s => `<a href="${sanitizeUrl(s.source_url || job.url)}" target="_blank" rel="noopener noreferrer" class="source-tag">${escapeHtml(s.source_name)}</a>`).join('')}
             </div>
         </div>
         <div class="detail-layout">
@@ -114,7 +114,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
                             ? `<button class="btn btn-success" id="apply-now-btn" style="width:100%;background:#22c55e;color:white;font-weight:600">Apply Now →</button>`
                             : `<button class="btn btn-secondary btn-sm" id="find-apply-btn" style="width:100%">Find Apply Link</button>`
                         }
-                        <a href="${escapeHtml(job.url)}" target="_blank" class="btn btn-secondary">
+                        <a href="${sanitizeUrl(job.url)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
                             Open Job Listing
                         </a>
                         <button class="btn btn-secondary" id="copy-listing-link-btn">Copy Listing Link</button>
@@ -253,7 +253,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
                             <span style="font-size:0.75rem;color:var(--text-tertiary)">Glassdoor</span>
                         </div>
                     ` : ''}
-                    ${companyInfo.website ? `<a href="${escapeHtml(companyInfo.website)}" target="_blank" style="font-size:0.8125rem;color:var(--accent)">Company Website →</a>` : ''}
+                    ${companyInfo.website ? `<a href="${sanitizeUrl(companyInfo.website)}" target="_blank" rel="noopener noreferrer" style="font-size:0.8125rem;color:var(--accent)">Company Website →</a>` : ''}
                 </div>
                 ` : ''}
                 <div id="prepared-container">

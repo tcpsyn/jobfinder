@@ -1,6 +1,7 @@
 import logging
 import time
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
@@ -19,8 +20,8 @@ class HackerNewsScraper(BaseScraper):
 
         async with self.get_client() as client:
             try:
-                resp = await client.get(
-                    ALGOLIA_SEARCH_URL,
+                resp = await self.rate_limited_get(
+                    client, ALGOLIA_SEARCH_URL,
                     params={
                         "query": "who is hiring",
                         "tags": "story,ask_hn",
@@ -29,7 +30,7 @@ class HackerNewsScraper(BaseScraper):
                 )
                 resp.raise_for_status()
                 search_data = resp.json()
-            except Exception as e:
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.error(f"HN search failed: {e}")
                 return []
 
@@ -40,10 +41,10 @@ class HackerNewsScraper(BaseScraper):
             thread_id = hits[0]["objectID"]
 
             try:
-                resp = await client.get(HN_ITEM_URL.format(id=thread_id))
+                resp = await self.rate_limited_get(client, HN_ITEM_URL.format(id=thread_id))
                 resp.raise_for_status()
                 thread_data = resp.json()
-            except Exception as e:
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.error(f"HN thread fetch failed: {e}")
                 return []
 
@@ -52,10 +53,10 @@ class HackerNewsScraper(BaseScraper):
 
             for kid_id in kids[:100]:  # limit to first 100 comments
                 try:
-                    resp = await client.get(HN_ITEM_URL.format(id=kid_id))
+                    resp = await self.rate_limited_get(client, HN_ITEM_URL.format(id=kid_id))
                     resp.raise_for_status()
                     comment = resp.json()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.warning(f"HN comment {kid_id} fetch failed: {e}")
                     continue
 

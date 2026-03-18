@@ -64,7 +64,67 @@ function escapeHtml(str) {
     if (!str) return '';
     const d = document.createElement('div');
     d.textContent = str;
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function sanitizeHtml(html) {
+    const ALLOWED_TAGS = new Set([
+        'p', 'br', 'b', 'i', 'em', 'strong', 'u', 'ul', 'ol', 'li', 'a',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'table', 'thead',
+        'tbody', 'tr', 'th', 'td', 'pre', 'code', 'blockquote', 'hr', 'dl',
+        'dt', 'dd', 'sub', 'sup',
+    ]);
+    const ALLOWED_ATTRS = new Set(['href', 'target', 'rel']);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    function clean(node) {
+        for (const child of Array.from(node.childNodes)) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                const tag = child.tagName.toLowerCase();
+                if (tag === 'script' || tag === 'style' || tag === 'iframe' || tag === 'object' || tag === 'embed') {
+                    node.removeChild(child);
+                    continue;
+                }
+                if (!ALLOWED_TAGS.has(tag)) {
+                    while (child.firstChild) node.insertBefore(child.firstChild, child);
+                    node.removeChild(child);
+                    continue;
+                }
+                for (const attr of Array.from(child.attributes)) {
+                    if (!ALLOWED_ATTRS.has(attr.name)) {
+                        child.removeAttribute(attr.name);
+                    }
+                }
+                if (child.hasAttribute('href')) {
+                    const href = child.getAttribute('href').trim().toLowerCase();
+                    if (href.startsWith('javascript:') || href.startsWith('data:') || href.startsWith('vbscript:')) {
+                        child.removeAttribute('href');
+                    }
+                }
+                if (tag === 'a') {
+                    child.setAttribute('target', '_blank');
+                    child.setAttribute('rel', 'noopener noreferrer');
+                }
+                clean(child);
+            }
+        }
+    }
+    clean(doc.body);
+    return doc.body.innerHTML;
+}
+
+function sanitizeUrl(url) {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('#') || trimmed.startsWith('mailto:')) {
+        return trimmed;
+    }
+    return '';
+}
+
+function parseJsonField(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try { return JSON.parse(val); } catch { return []; }
 }
 
 function isNew(createdAt) {

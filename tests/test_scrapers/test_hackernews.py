@@ -69,10 +69,13 @@ async def test_hackernews_no_threads(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_hackernews_handles_error(httpx_mock):
-    httpx_mock.add_response(
-        url=re.compile(r"https://hn\.algolia\.com/api/v1/search\?.*"),
-        status_code=500,
-    )
+    # 3 responses for retry attempts (max_retries=3)
+    for _ in range(3):
+        httpx_mock.add_response(
+            url=re.compile(r"https://hn\.algolia\.com/api/v1/search\?.*"),
+            status_code=500,
+        )
     scraper = HackerNewsScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []

@@ -112,7 +112,15 @@ async def trigger_scrape(request: Request):
                 if app.state.scrape_progress:
                     app.state.scrape_progress["active"] = False
 
-    asyncio.create_task(_scrape_and_score())
+    async def _scrape_with_timeout():
+        try:
+            await asyncio.wait_for(_scrape_and_score(), timeout=1800)
+        except asyncio.TimeoutError:
+            logger.error("Background scrape+score timed out after 30 minutes")
+            if app.state.scrape_progress:
+                app.state.scrape_progress["active"] = False
+
+    asyncio.create_task(_scrape_with_timeout())
     return {"status": "triggered"}
 
 

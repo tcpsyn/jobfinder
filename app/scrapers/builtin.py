@@ -3,6 +3,7 @@ import logging
 import re
 from urllib.parse import quote_plus
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
@@ -150,9 +151,9 @@ class BuiltInScraper(BaseScraper):
             for path in paths:
                 url = f"{BASE_URL}{path}" if path.startswith("/") else path
                 try:
-                    resp = await client.get(url)
+                    resp = await self.rate_limited_get(client, url)
                     resp.raise_for_status()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"BuiltIn listing fetch failed for {path}: {e}")
                     continue
 
@@ -172,9 +173,9 @@ class BuiltInScraper(BaseScraper):
                 seen_urls.add(detail_url)
 
                 try:
-                    resp = await client.get(detail_url)
+                    resp = await self.rate_limited_get(client, detail_url)
                     resp.raise_for_status()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.debug(f"BuiltIn detail fetch failed for {detail_url}: {e}")
                     # Fall back to stub data
                     jobs.append(

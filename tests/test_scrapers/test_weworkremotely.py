@@ -47,8 +47,11 @@ async def test_wwr_handles_empty(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_wwr_handles_error(httpx_mock):
+    # 3 retry attempts per feed URL
     for url in FEED_URLS:
-        httpx_mock.add_response(url=url, status_code=500)
+        for _ in range(3):
+            httpx_mock.add_response(url=url, status_code=500)
     scraper = WeWorkRemotelyScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []

@@ -108,9 +108,12 @@ async def test_himalayas_handles_empty(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_himalayas_handles_error(httpx_mock):
-    httpx_mock.add_response(
-        url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), status_code=500
-    )
+    # 3 responses for retry attempts (max_retries=3)
+    for _ in range(3):
+        httpx_mock.add_response(
+            url=re.compile(r"https://himalayas\.app/jobs/api\?.*"), status_code=500
+        )
     scraper = HimalayasScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []

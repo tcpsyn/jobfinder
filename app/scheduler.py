@@ -9,6 +9,10 @@ logger = logging.getLogger(__name__)
 _scraper_breaker = CircuitBreaker(failure_threshold=5, cooldown_seconds=300.0)
 _enrichment_semaphore = asyncio.Semaphore(3)
 
+# Track consecutive zero-result runs per scraper for health monitoring
+_consecutive_zero_runs: dict[str, int] = {}
+ZERO_RESULT_WARN_THRESHOLD = 3
+
 
 async def run_scrape_cycle(db: Database, scrapers: list, search_terms: list[str] | None = None, progress: dict | None = None, scraper_keys: dict | None = None) -> int:
     """Scrape job boards and insert new listings. Scrape-only — no enrichment or scoring."""
@@ -72,6 +76,19 @@ async def run_scrape_cycle(db: Database, scrapers: list, search_terms: list[str]
                         total_new += 1
 
         logger.info(f"{source_name}: found {len(listings)} listings")
+
+        # Health tracking: warn on consecutive zero-result runs
+        if len(listings) == 0:
+            _consecutive_zero_runs[source_name] = _consecutive_zero_runs.get(source_name, 0) + 1
+            zeros = _consecutive_zero_runs[source_name]
+            if zeros >= ZERO_RESULT_WARN_THRESHOLD:
+                logger.warning(
+                    f"SCRAPER HEALTH: {source_name} returned 0 results for "
+                    f"{zeros} consecutive runs — may be broken or blocked"
+                )
+        else:
+            _consecutive_zero_runs[source_name] = 0
+
         await db.mark_scraper_ran(source_name)
 
     if progress is not None:

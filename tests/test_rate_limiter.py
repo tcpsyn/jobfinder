@@ -93,4 +93,4 @@ def test_get_limiter_for_url():
     assert limiter._per == 3.0
 
     limiter2 = get_limiter_for_url("https://dice.com/jobs/123")
-    assert limiter2._per == 1.0
+    assert limiter2._per == 2.0

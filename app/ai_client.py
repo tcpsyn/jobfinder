@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -106,7 +107,8 @@ async def check_ai_reachable(client: "AIClient") -> tuple[bool, str]:
     except httpx.HTTPStatusError as e:
         return False, f"{client.provider} returned HTTP {e.response.status_code}"
     except Exception as e:
-        return False, f"{client.provider} error: {e}"
+        logger.debug("AI health check failed: %s", e)
+        return False, f"{client.provider} error: {type(e).__name__}"
 
 
 class AIClient:
@@ -135,14 +137,20 @@ class AIClient:
             return OPENAI_COMPAT_PROVIDERS[self.provider]["base_url"]
         return ""
 
-    async def chat(self, prompt: str, max_tokens: int = 1024) -> str:
+    async def chat(self, prompt: str, max_tokens: int = 1024, timeout: float = 60.0) -> str:
         service = f"ai:{self.provider}"
         if _ai_breaker.is_open(service):
             raise RuntimeError(f"Circuit breaker open for {service}")
         try:
-            result = await self._chat_with_retry(prompt, max_tokens)
+            result = await asyncio.wait_for(
+                self._chat_with_retry(prompt, max_tokens),
+                timeout=timeout,
+            )
             _ai_breaker.record_success(service)
             return result
+        except asyncio.TimeoutError:
+            _ai_breaker.record_failure(service)
+            raise RuntimeError(f"AI request timed out after {timeout}s for {service}")
         except ValueError:
             raise
         except RuntimeError:

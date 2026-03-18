@@ -181,8 +181,11 @@ async def test_greenhouse_empty_response(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_greenhouse_server_error(httpx_mock):
-    _mock_single_company(httpx_mock, "testco", status_code=500)
+    # 3 responses for retry attempts (max_retries=3)
+    for _ in range(3):
+        _mock_single_company(httpx_mock, "testco", status_code=500)
     scraper = GreenhouseScraper(scraper_keys={"greenhouse_companies": "testco"})
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []
 

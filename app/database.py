@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import logging
@@ -35,6 +36,64 @@ def _title_similarity(t1: str, t2: str) -> float:
     return len(intersection) / max(len(w1), len(w2))
 
 
+_COLUMN_ALLOWLISTS = {
+    "applications": {
+        "status", "tailored_resume", "cover_letter", "email_draft", "applied_at",
+        "notes", "rejected_at", "offered_at", "withdrawn_at",
+        "response_received_at", "response_type", "days_to_response",
+    },
+    "work_history": {
+        "user_id", "company", "job_title", "location_city", "location_state",
+        "location_country", "start_month", "start_year", "end_month", "end_year",
+        "is_current", "description", "salary_at_position", "sort_order",
+    },
+    "education": {
+        "user_id", "school", "degree_type", "field_of_study", "minor",
+        "start_month", "start_year", "grad_month", "grad_year", "gpa", "honors",
+        "sort_order",
+    },
+    "certifications": {
+        "user_id", "name", "issuing_org", "cert_type", "license_number",
+        "state", "date_obtained", "expiration_date",
+    },
+    "skills": {
+        "user_id", "name", "years_experience", "proficiency",
+    },
+    "languages": {
+        "user_id", "language", "proficiency",
+    },
+    "user_references": {
+        "user_id", "name", "title", "company", "phone", "email",
+        "relationship", "years_known",
+    },
+    "military_service": {
+        "user_id", "branch", "rank", "specialty", "start_date", "end_date",
+    },
+    "eeo_responses": {
+        "gender", "race_ethnicity", "disability_status", "veteran_status",
+        "veteran_categories", "sexual_orientation",
+    },
+    "companies": {
+        "name", "normalized_name", "website", "description", "size",
+        "industry", "glassdoor_rating", "updated_at",
+    },
+}
+
+_VALID_REPLACE_TABLES = {
+    "work_history", "education", "certifications", "skills",
+    "languages", "user_references",
+}
+
+
+def _validate_columns(table: str, columns):
+    allowed = _COLUMN_ALLOWLISTS.get(table)
+    if allowed is None:
+        raise ValueError(f"No column allowlist for table: {table}")
+    bad = set(columns) - allowed
+    if bad:
+        raise ValueError(f"Invalid columns for {table}: {bad}")
+
+
 class Database:
     def __init__(self, db_path: str):
         self.db_path = db_path
@@ -43,6 +102,8 @@ class Database:
     async def init(self):
         self.db = await aiosqlite.connect(self.db_path)
         self.db.row_factory = aiosqlite.Row
+        await self.db.execute("PRAGMA foreign_keys = ON")
+        await self.db.execute("PRAGMA journal_mode = WAL")
         await self._load_vec_extension()
         await self._create_tables()
 
@@ -95,7 +156,7 @@ class Database:
                 job_id INTEGER NOT NULL,
                 source_name TEXT NOT NULL,
                 source_url TEXT,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS job_scores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,7 +166,7 @@ class Database:
                 concerns TEXT NOT NULL,
                 suggested_keywords TEXT NOT NULL,
                 scored_at TEXT NOT NULL,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS applications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,7 +177,7 @@ class Database:
                 email_draft TEXT,
                 applied_at TEXT,
                 notes TEXT,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS search_config (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -146,7 +207,7 @@ class Database:
                 event_type TEXT NOT NULL,
                 detail TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs(dedup_hash);
             CREATE INDEX IF NOT EXISTS idx_scores_job ON job_scores(job_id);
@@ -232,7 +293,7 @@ class Database:
             );
             CREATE TABLE IF NOT EXISTS military_service (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL DEFAULT 1 CHECK (id = 1),
+                user_id INTEGER NOT NULL DEFAULT 1 CHECK (user_id = 1),
                 branch TEXT NOT NULL DEFAULT '',
                 rank TEXT NOT NULL DEFAULT '',
                 specialty TEXT NOT NULL DEFAULT '',
@@ -297,7 +358,7 @@ class Database:
                 message TEXT NOT NULL,
                 read INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS email_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -353,8 +414,8 @@ class Database:
                 priority INTEGER NOT NULL DEFAULT 0,
                 queued_at TEXT NOT NULL,
                 prepared_at TEXT,
-                FOREIGN KEY (job_id) REFERENCES jobs(id),
-                FOREIGN KEY (resume_id) REFERENCES resumes(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+                FOREIGN KEY (resume_id) REFERENCES resumes(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS follow_up_templates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -382,15 +443,15 @@ class Database:
                 notes TEXT NOT NULL DEFAULT '',
                 date TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (contact_id) REFERENCES contacts(id)
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS job_contacts (
                 job_id INTEGER NOT NULL,
                 contact_id INTEGER NOT NULL,
                 relationship TEXT NOT NULL DEFAULT '',
                 PRIMARY KEY (job_id, contact_id),
-                FOREIGN KEY (job_id) REFERENCES jobs(id),
-                FOREIGN KEY (contact_id) REFERENCES contacts(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS career_suggestions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -415,7 +476,7 @@ class Database:
                 location TEXT NOT NULL DEFAULT '',
                 notes TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS context_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -571,7 +632,7 @@ class Database:
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
                 completed_at TEXT,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             )
         """)
         await self.db.execute(
@@ -588,7 +649,7 @@ class Database:
                 star_stories TEXT NOT NULL DEFAULT '[]',
                 talking_points TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (job_id) REFERENCES jobs(id)
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             )
         """)
 
@@ -656,6 +717,9 @@ class Database:
              posted_date, application_method, contact_email, dedup, now)
         )
         await self.db.commit()
+        if cursor.rowcount == 0:
+            existing = await self.find_job_by_hash(dedup)
+            return existing["id"] if existing else None
         return cursor.lastrowid
 
     async def get_job(self, job_id):
@@ -737,23 +801,22 @@ class Database:
         return d
 
     async def get_analytics(self) -> dict:
-        # Funnel conversion rates
-        funnel = {}
-        for status in ["interested", "prepared", "applied", "interviewing", "offered", "rejected"]:
-            cursor = await self.db.execute(
-                "SELECT COUNT(*) FROM applications WHERE status = ?", (status,))
-            row = await cursor.fetchone()
-            funnel[status] = row[0]
+        # Funnel conversion rates — single GROUP BY instead of per-status COUNT
+        cursor = await self.db.execute(
+            "SELECT status, COUNT(*) FROM applications GROUP BY status")
+        funnel_rows = {row[0]: row[1] for row in await cursor.fetchall()}
+        funnel = {s: funnel_rows.get(s, 0) for s in
+                  ["interested", "prepared", "applied", "interviewing", "offered", "rejected"]}
 
-        # Score calibration: avg score by application status
-        calibration = {}
-        for status in ["interested", "applied", "interviewing", "rejected"]:
-            cursor = await self.db.execute(
-                """SELECT AVG(js.match_score) FROM applications a
-                   JOIN job_scores js ON js.job_id = a.job_id
-                   WHERE a.status = ?""", (status,))
-            row = await cursor.fetchone()
-            calibration[status] = round(row[0], 1) if row[0] else None
+        # Score calibration — single GROUP BY instead of per-status AVG
+        cursor = await self.db.execute(
+            """SELECT a.status, AVG(js.match_score)
+               FROM applications a JOIN job_scores js ON js.job_id = a.job_id
+               WHERE a.status IN ('interested', 'applied', 'interviewing', 'rejected')
+               GROUP BY a.status""")
+        cal_rows = {row[0]: row[1] for row in await cursor.fetchall()}
+        calibration = {s: round(cal_rows[s], 1) if cal_rows.get(s) else None
+                       for s in ["interested", "applied", "interviewing", "rejected"]}
 
         # Source effectiveness: jobs per source, avg score per source
         cursor = await self.db.execute(
@@ -862,6 +925,7 @@ class Database:
         return cursor.lastrowid
 
     async def update_application(self, app_id, **kwargs):
+        _validate_columns("applications", kwargs.keys())
         sets = ", ".join(f"{k} = ?" for k in kwargs)
         vals = list(kwargs.values())
         vals.append(app_id)
@@ -1374,6 +1438,7 @@ class Database:
         return dict(row) if row else None
 
     async def save_company(self, name: str, **fields):
+        _validate_columns("companies", fields.keys())
         now = datetime.now(timezone.utc).isoformat()
         normalized = name.lower().strip()
         existing = await self.get_company(name)
@@ -1392,13 +1457,12 @@ class Database:
         await self.db.commit()
 
     async def clear_jobs(self):
-        await self.db.executescript("""
-            DELETE FROM sources;
-            DELETE FROM job_scores;
-            DELETE FROM applications;
-            DELETE FROM app_events;
-            DELETE FROM jobs;
-        """)
+        for table in [
+            "offers", "job_contacts", "interview_prep",
+            "application_queue", "notifications", "reminders",
+            "sources", "job_scores", "app_events", "applications", "jobs",
+        ]:
+            await self.db.execute(f"DELETE FROM {table}")
         await self.db.commit()
 
     async def get_user_profile(self) -> dict | None:
@@ -1406,7 +1470,7 @@ class Database:
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-    async def save_user_profile(self, **fields):
+    async def save_user_profile(self, _commit=True, **fields):
         now = datetime.now(timezone.utc).isoformat()
         # Merge with existing profile to avoid blanking out columns not provided
         existing = await self.get_user_profile()
@@ -1434,52 +1498,69 @@ class Database:
                 ON CONFLICT(id) DO UPDATE SET {update_str}, updated_at = excluded.updated_at""",
             (*values, now)
         )
-        await self.db.commit()
+        if _commit:
+            await self.db.commit()
 
     async def get_full_profile(self) -> dict:
         profile = await self.get_user_profile()
         if not profile:
             profile = {}
-        profile["work_history"] = await self.get_work_history()
-        profile["education"] = await self.get_education()
-        profile["certifications"] = await self.get_certifications()
-        profile["skills"] = await self.get_skills()
-        profile["languages"] = await self.get_languages()
-        profile["references"] = await self.get_references()
-        profile["military"] = await self.get_military_service()
-        profile["eeo"] = await self.get_eeo_responses()
+        work, edu, certs, skills, langs, refs, mil, eeo = await asyncio.gather(
+            self.get_work_history(),
+            self.get_education(),
+            self.get_certifications(),
+            self.get_skills(),
+            self.get_languages(),
+            self.get_references(),
+            self.get_military_service(),
+            self.get_eeo_responses(),
+        )
+        profile["work_history"] = work
+        profile["education"] = edu
+        profile["certifications"] = certs
+        profile["skills"] = skills
+        profile["languages"] = langs
+        profile["references"] = refs
+        profile["military"] = mil
+        profile["eeo"] = eeo
         return profile
 
     async def save_full_profile(self, data: dict):
         nested_keys = {"work_history", "education", "certifications", "skills",
                         "languages", "references", "military", "eeo"}
         profile_fields = {k: v for k, v in data.items() if k not in nested_keys}
-        if profile_fields:
-            # Merge with existing profile so we don't blank out fields not sent
-            existing = await self.get_user_profile() or {}
-            existing.pop("id", None)
-            existing.pop("updated_at", None)
-            existing.update(profile_fields)
-            await self.save_user_profile(**existing)
+        try:
+            if profile_fields:
+                existing = await self.get_user_profile() or {}
+                existing.pop("id", None)
+                existing.pop("updated_at", None)
+                existing.update(profile_fields)
+                await self.save_user_profile(_commit=False, **existing)
 
-        if "work_history" in data:
-            await self._replace_list("work_history", data["work_history"])
-        if "education" in data:
-            await self._replace_list("education", data["education"])
-        if "certifications" in data:
-            await self._replace_list("certifications", data["certifications"])
-        if "skills" in data:
-            await self._replace_list("skills", data["skills"])
-        if "languages" in data:
-            await self._replace_list("languages", data["languages"])
-        if "references" in data:
-            await self._replace_list("user_references", data["references"])
-        if "military" in data:
-            await self.save_military_service(data["military"])
-        if "eeo" in data:
-            await self.save_eeo_responses(data["eeo"])
+            if "work_history" in data:
+                await self._replace_list("work_history", data["work_history"], _commit=False)
+            if "education" in data:
+                await self._replace_list("education", data["education"], _commit=False)
+            if "certifications" in data:
+                await self._replace_list("certifications", data["certifications"], _commit=False)
+            if "skills" in data:
+                await self._replace_list("skills", data["skills"], _commit=False)
+            if "languages" in data:
+                await self._replace_list("languages", data["languages"], _commit=False)
+            if "references" in data:
+                await self._replace_list("user_references", data["references"], _commit=False)
+            if "military" in data:
+                await self.save_military_service(data["military"], _commit=False)
+            if "eeo" in data:
+                await self.save_eeo_responses(data["eeo"], _commit=False)
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
-    async def _replace_list(self, table: str, items: list):
+    async def _replace_list(self, table: str, items: list, _commit=True):
+        if table not in _VALID_REPLACE_TABLES:
+            raise ValueError(f"Invalid table for _replace_list: {table}")
         await self.db.execute(f"DELETE FROM {table} WHERE user_id = 1")
         for i, item in enumerate(items):
             item.pop("id", None)
@@ -1487,11 +1568,13 @@ class Database:
             if "sort_order" in self._get_table_cols(table):
                 item.setdefault("sort_order", i)
             cols = list(item.keys())
+            _validate_columns(table, cols)
             vals = list(item.values())
             placeholders = ", ".join("?" for _ in cols)
             col_str = ", ".join(cols)
             await self.db.execute(f"INSERT INTO {table} ({col_str}) VALUES ({placeholders})", vals)
-        await self.db.commit()
+        if _commit:
+            await self.db.commit()
 
     def _get_table_cols(self, table: str) -> set:
         # Simple mapping of tables that have sort_order
@@ -1509,6 +1592,7 @@ class Database:
     async def save_work_history(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("work_history", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1537,6 +1621,7 @@ class Database:
     async def save_education(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("education", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1565,6 +1650,7 @@ class Database:
     async def save_certification(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("certifications", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1593,6 +1679,7 @@ class Database:
     async def save_skill(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("skills", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1621,6 +1708,7 @@ class Database:
     async def save_language(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("languages", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1649,6 +1737,7 @@ class Database:
     async def save_reference(self, entry: dict) -> int:
         entry.setdefault("user_id", 1)
         entry_id = entry.pop("id", None)
+        _validate_columns("user_references", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -1674,9 +1763,10 @@ class Database:
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-    async def save_military_service(self, fields: dict):
+    async def save_military_service(self, fields: dict, _commit=True):
         fields.pop("id", None)
         fields.pop("user_id", None)
+        _validate_columns("military_service", fields.keys())
         cols = list(fields.keys())
         vals = list(fields.values())
         if not cols:
@@ -1689,7 +1779,8 @@ class Database:
                 VALUES (1, 1, {placeholders})
                 ON CONFLICT(id) DO UPDATE SET {update_str}""",
             vals)
-        await self.db.commit()
+        if _commit:
+            await self.db.commit()
 
     # EEO responses CRUD (singleton)
     async def get_eeo_responses(self) -> dict | None:
@@ -1701,10 +1792,11 @@ class Database:
         d["veteran_categories"] = json.loads(d.get("veteran_categories", "[]"))
         return d
 
-    async def save_eeo_responses(self, fields: dict):
+    async def save_eeo_responses(self, fields: dict, _commit=True):
         fields.pop("id", None)
         if "veteran_categories" in fields and isinstance(fields["veteran_categories"], list):
             fields["veteran_categories"] = json.dumps(fields["veteran_categories"])
+        _validate_columns("eeo_responses", fields.keys())
         cols = list(fields.keys())
         vals = list(fields.values())
         if not cols:
@@ -1717,7 +1809,8 @@ class Database:
                 VALUES (1, {placeholders})
                 ON CONFLICT(id) DO UPDATE SET {update_str}""",
             vals)
-        await self.db.commit()
+        if _commit:
+            await self.db.commit()
 
     # Custom Q&A CRUD
     async def get_custom_qa(self) -> list[dict]:
@@ -1779,43 +1872,42 @@ class Database:
         return cursor.lastrowid
 
     async def clear_all(self):
-        await self.db.executescript("""
-            DELETE FROM sources;
-            DELETE FROM job_scores;
-            DELETE FROM applications;
-            DELETE FROM app_events;
-            DELETE FROM jobs;
-            DELETE FROM search_config;
-            DELETE FROM ai_settings;
-            DELETE FROM user_profile;
-            DELETE FROM companies;
-            DELETE FROM work_history;
-            DELETE FROM education;
-            DELETE FROM certifications;
-            DELETE FROM skills;
-            DELETE FROM languages;
-            DELETE FROM user_references;
-            DELETE FROM military_service;
-            DELETE FROM eeo_responses;
-            DELETE FROM custom_qa;
-            DELETE FROM autofill_history;
-        """)
+        for table in [
+            "context_items", "offers", "job_contacts", "interview_prep",
+            "application_queue", "notifications", "reminders",
+            "contact_interactions",
+            "sources", "job_scores", "app_events", "applications",
+            "jobs", "contacts", "resumes",
+            "search_config", "ai_settings", "user_profile", "companies",
+            "work_history", "education", "certifications", "skills",
+            "languages", "user_references", "military_service", "eeo_responses",
+            "custom_qa", "autofill_history", "follow_up_templates",
+            "career_suggestions", "saved_views", "scraper_keys",
+            "scraper_schedule", "job_alerts", "email_settings",
+            "embedding_settings",
+        ]:
+            await self.db.execute(f"DELETE FROM {table}")
         await self.db.commit()
 
     async def get_stats(self):
-        stats = {}
-        for key, query in [
-            ("total_jobs", "SELECT COUNT(*) FROM jobs WHERE dismissed = 0"),
-            ("total_scored", "SELECT COUNT(*) FROM job_scores"),
-            ("total_applied", "SELECT COUNT(*) FROM applications WHERE status = 'applied'"),
-            ("total_interested", "SELECT COUNT(*) FROM applications WHERE status = 'interested'"),
-            ("total_interviewing", "SELECT COUNT(*) FROM applications WHERE status = 'interviewing'"),
-            ("total_prepared", "SELECT COUNT(*) FROM applications WHERE status = 'prepared'"),
-        ]:
-            cursor = await self.db.execute(query)
-            row = await cursor.fetchone()
-            stats[key] = row[0]
-        return stats
+        cursor = await self.db.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM jobs WHERE dismissed = 0) as total_jobs,
+                (SELECT COUNT(*) FROM job_scores) as total_scored,
+                (SELECT COUNT(*) FROM applications WHERE status = 'applied') as total_applied,
+                (SELECT COUNT(*) FROM applications WHERE status = 'interested') as total_interested,
+                (SELECT COUNT(*) FROM applications WHERE status = 'interviewing') as total_interviewing,
+                (SELECT COUNT(*) FROM applications WHERE status = 'prepared') as total_prepared
+        """)
+        row = await cursor.fetchone()
+        return {
+            "total_jobs": row[0],
+            "total_scored": row[1],
+            "total_applied": row[2],
+            "total_interested": row[3],
+            "total_interviewing": row[4],
+            "total_prepared": row[5],
+        }
 
     async def get_email_settings(self) -> dict | None:
         cursor = await self.db.execute("SELECT * FROM email_settings WHERE id = 1")
@@ -2044,6 +2136,8 @@ class Database:
         if applied_at:
             try:
                 applied_dt = datetime.fromisoformat(applied_at)
+                if applied_dt.tzinfo is None:
+                    applied_dt = applied_dt.replace(tzinfo=timezone.utc)
                 days_to_response = (datetime.now(timezone.utc) - applied_dt).days
             except (ValueError, TypeError):
                 pass
@@ -2675,15 +2769,21 @@ class Database:
             return []
         from app.embeddings import search_embeddings
         results = await search_embeddings(self.db, "vec_jobs", query_vector, limit=limit)
+        if not results:
+            return []
+        job_ids = [job_id for job_id, _ in results]
+        distance_map = {job_id: distance for job_id, distance in results}
+        placeholders = ",".join("?" for _ in job_ids)
+        cursor = await self.db.execute(
+            f"SELECT id, title, company, location, url FROM jobs WHERE id IN ({placeholders})",
+            job_ids,
+        )
+        rows = await cursor.fetchall()
+        row_map = {row["id"]: dict(row) for row in rows}
         similar = []
-        for job_id, distance in results:
-            cursor = await self.db.execute(
-                "SELECT id, title, company, location, url FROM jobs WHERE id = ?",
-                (job_id,)
-            )
-            row = await cursor.fetchone()
-            if row:
-                similar.append({**dict(row), "distance": distance})
+        for job_id in job_ids:
+            if job_id in row_map:
+                similar.append({**row_map[job_id], "distance": distance_map[job_id]})
         return similar
 
     async def find_similar_context_by_vector(self, query_vector: list[float],

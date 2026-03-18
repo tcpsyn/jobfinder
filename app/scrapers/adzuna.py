@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,7 @@ class AdzunaScraper(BaseScraper):
                             resp = await self.rate_limited_get(client, url, params=params)
                             resp.raise_for_status()
                             data = resp.json()
-                        except Exception as e:
+                        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                             logger.error(f"Adzuna scrape failed for '{term}' page {page}: {e}")
                             break
 
@@ -107,7 +109,7 @@ class AdzunaScraper(BaseScraper):
 
                         if len(results) < PAGE_SIZE:
                             break
-        except Exception as e:
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"Adzuna scrape failed: {e}")
             return []
 

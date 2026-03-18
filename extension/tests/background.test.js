@@ -6,20 +6,44 @@ let originalFetch;
 let onRemovedCallback;
 let onMessageHandler;
 
+let onUpdatedCallbacks;
+
 function loadBackground() {
+  onUpdatedCallbacks = [];
+
   globalThis.chrome = {
     storage: {
       local: {
         get: vi.fn().mockResolvedValue({ serverUrl: 'http://localhost:8085' }),
       },
+      session: {
+        get: vi.fn().mockResolvedValue({}),
+        set: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      },
     },
     tabs: {
       onRemoved: {
         addListener: vi.fn((cb) => { onRemovedCallback = cb; }),
+        removeListener: vi.fn(),
       },
-      onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+      onUpdated: {
+        addListener: vi.fn((cb) => { onUpdatedCallbacks.push(cb); }),
+        removeListener: vi.fn((cb) => {
+          onUpdatedCallbacks = onUpdatedCallbacks.filter(c => c !== cb);
+        }),
+      },
       query: vi.fn().mockResolvedValue([{ id: 42 }]),
-      create: vi.fn().mockResolvedValue({ id: 1 }),
+      create: vi.fn().mockImplementation(async (opts) => {
+        const tab = { id: Math.floor(Math.random() * 1000) + 10 };
+        // Simulate tab completing load after a short delay to allow listener registration
+        setTimeout(() => {
+          for (const cb of [...onUpdatedCallbacks]) {
+            cb(tab.id, { status: 'complete' });
+          }
+        }, 5);
+        return tab;
+      }),
       sendMessage: vi.fn(),
     },
     commands: {
@@ -410,13 +434,21 @@ describe('tab lifecycle cleanup', () => {
       { id: 'q1', job_id: 1, apply_url: 'https://example.com/apply/1' },
       { id: 'q2', job_id: 2, apply_url: 'https://example.com/apply/2' },
     ];
-    await sendMessage({ type: 'fillFromQueue', items });
+    const startResult = await sendMessage({ type: 'fillFromQueue', items });
+    expect(startResult.ok).toBe(true);
 
-    // Simulate the tab being closed (tab id 1 matches the mocked chrome.tabs.create result)
-    onRemovedCallback(1);
+    // Get the tab ID that was stored in queueState
+    const firstTabId = (await globalThis.chrome.tabs.create.mock.results[0].value).id;
 
-    // Should have tried to open the next tab
-    expect(globalThis.chrome.tabs.create).toHaveBeenCalledTimes(2);
+    // Simulate the tab being closed — the handler is async and calls processNextQueueItem
+    // The onRemovedCallback stored by the mock is the queue cleanup listener
+    const queueCleanupCallback = globalThis.chrome.tabs.onRemoved.addListener.mock.calls[0][0];
+    await queueCleanupCallback(firstTabId);
+
+    // Wait for the async chain to complete
+    await vi.waitFor(() => {
+      expect(globalThis.chrome.tabs.create).toHaveBeenCalledTimes(2);
+    }, { timeout: 1000 });
   });
 });
 
@@ -467,5 +499,67 @@ describe('getServerUrl', () => {
 
     const url = globalThis.fetch.mock.calls[0][0];
     expect(url).toBe('http://localhost:8085/api/health');
+  });
+
+  it('rejects non-http/https URLs', async () => {
+    globalThis.chrome.storage.local.get.mockResolvedValue({ serverUrl: 'ftp://example.com' });
+    const result = await sendMessage({ type: 'checkConnection' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('http');
+  });
+
+  it('rejects javascript: URLs', async () => {
+    globalThis.chrome.storage.local.get.mockResolvedValue({ serverUrl: 'javascript:alert(1)' });
+    const result = await sendMessage({ type: 'checkConnection' });
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts https URLs', async () => {
+    globalThis.chrome.storage.local.get.mockResolvedValue({ serverUrl: 'https://myserver.com' });
+    mockFetchOk({ status: 'healthy' });
+    const result = await sendMessage({ type: 'checkConnection' });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Queue state persistence
+// ═══════════════════════════════════════════════════════════════
+
+describe('queue state persistence', () => {
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    loadBackground();
+    mockFetchOk({ status: 'ok' });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('persists queue state to session storage on start', async () => {
+    const items = [
+      { id: 'q1', job_id: 1, apply_url: 'https://example.com/apply/1' },
+    ];
+    await sendMessage({ type: 'fillFromQueue', items });
+    expect(globalThis.chrome.storage.session.set).toHaveBeenCalled();
+  });
+
+  it('clears session storage when queue completes', async () => {
+    const items = [
+      { id: 'q1', job_id: 1, apply_url: 'https://example.com/apply/1' },
+    ];
+    await sendMessage({ type: 'fillFromQueue', items });
+    await sendMessage({ type: 'queueUserAction', queueItemId: 'q1', action: 'submitted' });
+    expect(globalThis.chrome.storage.session.remove).toHaveBeenCalled();
+  });
+
+  it('clears session storage on cancel', async () => {
+    const items = [
+      { id: 'q1', job_id: 1, apply_url: 'https://example.com/apply/1' },
+    ];
+    await sendMessage({ type: 'fillFromQueue', items });
+    await sendMessage({ type: 'cancelQueue' });
+    expect(globalThis.chrome.storage.session.remove).toHaveBeenCalled();
   });
 });

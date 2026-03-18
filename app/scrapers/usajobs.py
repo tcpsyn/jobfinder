@@ -1,6 +1,8 @@
 import logging
 import os
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ class USAJobsScraper(BaseScraper):
                         "RemoteIndicator": "True",
                         "ResultsPerPage": 50,
                     }
-                    resp = await client.get(API_URL, headers=headers, params=params)
+                    resp = await self.rate_limited_get(client, API_URL, headers=headers, params=params)
                     resp.raise_for_status()
                     data = resp.json()
 
@@ -62,8 +64,11 @@ class USAJobsScraper(BaseScraper):
                         salary_max = None
                         remuneration = match.get("PositionRemuneration", [])
                         if remuneration:
-                            salary_min = int(float(remuneration[0].get("MinimumRange", 0)))
-                            salary_max = int(float(remuneration[0].get("MaximumRange", 0)))
+                            try:
+                                salary_min = int(float(remuneration[0].get("MinimumRange", 0)))
+                                salary_max = int(float(remuneration[0].get("MaximumRange", 0)))
+                            except (ValueError, TypeError, IndexError):
+                                pass
 
                         posted_date = match.get("PublicationStartDate", None)
 
@@ -80,7 +85,7 @@ class USAJobsScraper(BaseScraper):
                                 posted_date=posted_date,
                             )
                         )
-        except Exception as e:
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"USAJobs scrape failed: {e}")
             return []
 

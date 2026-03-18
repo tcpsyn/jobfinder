@@ -145,9 +145,12 @@ async def test_indeed_handles_empty(httpx_mock):
 @patch("app.scrapers.indeed.PLAYWRIGHT_AVAILABLE", False)
 async def test_indeed_handles_error(httpx_mock):
     """Test that HTTP errors are handled gracefully."""
+    # 3 retry attempts per keyword
     for _ in DEFAULT_KEYWORDS:
-        httpx_mock.add_response(url=URL_PATTERN, status_code=500)
+        for _ in range(3):
+            httpx_mock.add_response(url=URL_PATTERN, status_code=500)
     scraper = IndeedScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []
 

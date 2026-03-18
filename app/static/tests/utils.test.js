@@ -127,8 +127,12 @@ describe('getScoreClass', () => {
 describe('escapeHtml', () => {
     it('escapes HTML special characters', () => {
         expect(escapeHtml('<script>alert("xss")</script>')).toBe(
-            '&lt;script&gt;alert("xss")&lt;/script&gt;'
+            '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
         );
+    });
+
+    it('escapes single quotes', () => {
+        expect(escapeHtml("it's")).toBe("it&#39;s");
     });
 
     it('escapes ampersands', () => {

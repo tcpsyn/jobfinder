@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -14,10 +16,10 @@ class RemoteOKScraper(BaseScraper):
         jobs = []
         async with self.get_client() as client:
             try:
-                resp = await client.get(API_URL)
+                resp = await self.rate_limited_get(client, API_URL)
                 resp.raise_for_status()
                 data = resp.json()
-            except Exception as e:
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.error(f"RemoteOK scrape failed: {e}")
                 return jobs
 

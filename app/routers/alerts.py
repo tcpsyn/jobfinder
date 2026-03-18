@@ -79,7 +79,9 @@ async def mark_all_read(request: Request):
 @router.get("/notifications/stream")
 async def notification_stream(request: Request):
     queue: asyncio.Queue = asyncio.Queue(maxsize=50)
-    request.app.state.notification_subscribers.append(queue)
+    lock = request.app.state.notification_lock
+    async with lock:
+        request.app.state.notification_subscribers.append(queue)
 
     async def event_generator():
         try:
@@ -89,7 +91,9 @@ async def notification_stream(request: Request):
         except asyncio.CancelledError:
             pass
         finally:
-            request.app.state.notification_subscribers.remove(queue)
+            async with lock:
+                if queue in request.app.state.notification_subscribers:
+                    request.app.state.notification_subscribers.remove(queue)
 
     return StreamingResponse(
         event_generator(), media_type="text/event-stream",

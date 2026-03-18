@@ -5,6 +5,22 @@ const PAGE_SIZE = 50;
 let selectedJobIds = new Set();
 let selectMode = false;
 
+// === View Cleanup Registry ===
+const _viewCleanups = [];
+
+function registerViewCleanup(fn) {
+    _viewCleanups.push(fn);
+}
+
+function cleanupCurrentView() {
+    while (_viewCleanups.length) _viewCleanups.pop()();
+    stopScrapePoll();
+    if (typeof queueEventSource !== 'undefined' && queueEventSource) {
+        queueEventSource.close();
+        queueEventSource = null;
+    }
+}
+
 // === Router ===
 function getRoute() {
     const hash = window.location.hash || '#/';
@@ -42,6 +58,7 @@ function updateActiveNav() {
 }
 
 async function handleRoute() {
+    cleanupCurrentView();
     const route = getRoute();
     updateActiveNav();
     const app = document.getElementById('app');
@@ -101,30 +118,35 @@ function loadSavedFilterState() {
 }
 
 let _cachedViews = null;
+let _viewsMigrating = false;
 
 async function getSmartViews() {
     if (_cachedViews) return _cachedViews;
     try {
         const data = await api.request('GET', '/api/saved-views');
         _cachedViews = data.views || [];
-        // Migrate localStorage views on first load
-        try {
-            const raw = localStorage.getItem(SMART_VIEWS_KEY);
-            if (raw) {
-                const localViews = JSON.parse(raw);
-                if (localViews.length > 0) {
-                    const existingNames = new Set(_cachedViews.map(v => v.name));
-                    for (const lv of localViews) {
-                        if (!existingNames.has(lv.name)) {
-                            await api.request('POST', '/api/saved-views', { name: lv.name, filters: lv.filters });
+        if (!_viewsMigrating) {
+            try {
+                const raw = localStorage.getItem(SMART_VIEWS_KEY);
+                if (raw) {
+                    _viewsMigrating = true;
+                    const localViews = JSON.parse(raw);
+                    if (localViews.length > 0) {
+                        const existingNames = new Set(_cachedViews.map(v => v.name));
+                        for (const lv of localViews) {
+                            if (!existingNames.has(lv.name)) {
+                                await api.request('POST', '/api/saved-views', { name: lv.name, filters: lv.filters });
+                            }
                         }
+                        localStorage.removeItem(SMART_VIEWS_KEY);
+                        _cachedViews = null;
+                        _viewsMigrating = false;
+                        return getSmartViews();
                     }
-                    localStorage.removeItem(SMART_VIEWS_KEY);
-                    _cachedViews = null;
-                    return getSmartViews();
+                    _viewsMigrating = false;
                 }
-            }
-        } catch {}
+            } catch { _viewsMigrating = false; }
+        }
         return _cachedViews;
     } catch {
         return [];
@@ -325,8 +347,8 @@ function goBack() {
     const modal = document.getElementById('shortcuts-modal');
     if (modal) { modal.remove(); return; }
 
-    const appModal = document.querySelector('.modal-overlay');
-    if (appModal) { appModal.closest('.modal-overlay')?.parentElement?.remove?.() || appModal.remove(); return; }
+    const appModal = document.getElementById('app-modal');
+    if (appModal) { appModal.remove(); return; }
 
     if (notifDropdownOpen) {
         document.getElementById('notif-dropdown').style.display = 'none';
@@ -454,18 +476,29 @@ async function toggleNotifDropdown() {
     }
 }
 
+let _notifEventSource = null;
+let _notifSSERetries = 0;
+const _NOTIF_SSE_MAX_RETRIES = 5;
+
 function initNotificationSSE() {
-    const evtSource = new EventSource('/api/notifications/stream');
-    evtSource.onmessage = (event) => {
+    if (_notifEventSource) { _notifEventSource.close(); _notifEventSource = null; }
+    _notifEventSource = new EventSource('/api/notifications/stream');
+    _notifEventSource.onmessage = (event) => {
         try {
+            _notifSSERetries = 0;
             const notif = JSON.parse(event.data);
             showToast(`${notif.title}: ${notif.message}`, 'info');
             updateNotifBadge();
         } catch {}
     };
-    evtSource.onerror = () => {
-        evtSource.close();
-        setTimeout(initNotificationSSE, 30000);
+    _notifEventSource.onerror = () => {
+        _notifEventSource.close();
+        _notifEventSource = null;
+        _notifSSERetries++;
+        if (_notifSSERetries <= _NOTIF_SSE_MAX_RETRIES) {
+            const delay = Math.min(30000 * Math.pow(2, _notifSSERetries - 1), 300000);
+            setTimeout(initNotificationSSE, delay);
+        }
     };
 }
 

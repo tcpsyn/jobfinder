@@ -66,8 +66,8 @@ function renderTriageCard() {
 
     const job = triageJobs[triageIndex];
     const score = job.match_score;
-    const reasons = job.match_reasons ? JSON.parse(job.match_reasons) : [];
-    const concerns = job.concerns ? JSON.parse(job.concerns) : [];
+    const reasons = parseJsonField(job.match_reasons);
+    const concerns = parseJsonField(job.concerns);
     const salary = formatSalary(job.salary_min, job.salary_max, job.salary_estimate_min, job.salary_estimate_max);
 
     container.innerHTML = `
@@ -154,6 +154,8 @@ async function triageUndo() {
     if (!triageUndoStack.length) return;
     const last = triageUndoStack.pop();
     triageIndex = last.index;
-    // No API undo for dismiss/keep — the card just goes back in view
+    if (last.action === 'dismiss' && last.jobId) {
+        try { await api.updateApplication(last.jobId, 'interested'); } catch {}
+    }
     renderTriageCard();
 }

@@ -1,6 +1,7 @@
 import logging
 
 import feedparser
+import httpx
 
 from app.scrapers.base import BaseScraper, JobListing
 
@@ -20,9 +21,9 @@ class WeWorkRemotelyScraper(BaseScraper):
         async with self.get_client() as client:
             for feed_url in FEED_URLS:
                 try:
-                    resp = await client.get(feed_url)
+                    resp = await self.rate_limited_get(client, feed_url)
                     resp.raise_for_status()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"WWR scrape failed for {feed_url}: {e}")
                     continue
 

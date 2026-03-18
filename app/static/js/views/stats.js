@@ -113,6 +113,7 @@ async function renderStats(container) {
         function stopScoringPoll() {
             if (scoringPollInterval) { clearInterval(scoringPollInterval); scoringPollInterval = null; }
         }
+        registerViewCleanup(stopScoringPoll);
         function startScoringPoll() {
             stopScoringPoll();
             scoringPollInterval = setInterval(async () => {

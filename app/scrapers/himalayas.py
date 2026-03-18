@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -32,12 +34,12 @@ class HimalayasScraper(BaseScraper):
         async with self.get_client() as client:
             for page in range(MAX_PAGES):
                 try:
-                    resp = await client.get(
-                        API_URL, params={"limit": PAGE_SIZE, "offset": page * PAGE_SIZE}
+                    resp = await self.rate_limited_get(
+                        client, API_URL, params={"limit": PAGE_SIZE, "offset": page * PAGE_SIZE}
                     )
                     resp.raise_for_status()
                     data = resp.json()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"Himalayas scrape failed page {page}: {e}")
                     break
 

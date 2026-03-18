@@ -1,5 +1,7 @@
 import logging
 
+import httpx
+
 from app.scrapers.base import BaseScraper, JobListing
 
 logger = logging.getLogger(__name__)
@@ -98,7 +100,7 @@ class GreenhouseScraper(BaseScraper):
                         continue
                     resp.raise_for_status()
                     data = resp.json()
-                except Exception as e:
+                except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"Greenhouse scrape failed for {company}: {e}")
                     continue
 

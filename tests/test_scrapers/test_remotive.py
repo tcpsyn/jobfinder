@@ -65,12 +65,12 @@ async def test_remotive_handles_empty(httpx_mock):
 
 @pytest.mark.asyncio
 async def test_remotive_handles_error(httpx_mock):
-    httpx_mock.add_response(
-        url=re.compile(r"https://remotive\.com/api/remote-jobs\?.*"), status_code=500
-    )
-    httpx_mock.add_response(
-        url=re.compile(r"https://remotive\.com/api/remote-jobs\?.*"), status_code=500
-    )
+    # 2 categories × 3 retry attempts = 6 responses needed
+    for _ in range(6):
+        httpx_mock.add_response(
+            url=re.compile(r"https://remotive\.com/api/remote-jobs\?.*"), status_code=500
+        )
     scraper = RemotiveScraper()
+    scraper.initial_delay = 0.01
     jobs = await scraper.scrape()
     assert jobs == []

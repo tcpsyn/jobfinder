@@ -2,6 +2,7 @@ import json
 import logging
 import re
 
+import httpx
 from bs4 import BeautifulSoup
 
 from app.scrapers.base import BaseScraper, JobListing
@@ -287,7 +288,14 @@ class WellfoundScraper(BaseScraper):
                         client, url, headers=BROWSER_HEADERS,
                     )
                     resp.raise_for_status()
-                except Exception as e:
+                except httpx.HTTPStatusError as e:
+                    status = e.response.status_code
+                    if status in (403, 429):
+                        logger.warning(f"Wellfound blocked ({status}) for {path}")
+                    else:
+                        logger.error(f"Wellfound HTTP {status} for {path}")
+                    continue
+                except (httpx.TimeoutException, httpx.ConnectError) as e:
                     logger.error(f"Wellfound fetch failed for {path}: {e}")
                     continue
 

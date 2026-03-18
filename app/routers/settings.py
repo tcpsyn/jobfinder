@@ -548,10 +548,19 @@ async def update_scraper_schedule(request: Request):
     return {"ok": True}
 
 
+_MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+_ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".doc", ".docx", ".rtf"}
+
+
 @router.post("/resume/upload")
 async def upload_resume(request: Request, file: UploadFile = File(...)):
-    content = await file.read()
     filename = (file.filename or "").lower()
+    ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}")
+    content = await file.read()
+    if len(content) > _MAX_UPLOAD_SIZE:
+        raise HTTPException(400, f"File too large ({len(content)} bytes). Maximum: {_MAX_UPLOAD_SIZE // (1024*1024)}MB")
     if filename.endswith(".pdf"):
         import fitz
         doc = fitz.open(stream=content, filetype="pdf")

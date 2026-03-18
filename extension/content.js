@@ -16,6 +16,21 @@
   const originalValues = new Map(); // selector -> { originalValue, label, value, confidence, action }
   let overlayMode = 'status'; // status | compact | expanded
 
+  // ─── History interceptor (single patch, multiple callbacks) ──
+
+  const historyCallbacks = { pushState: new Set(), replaceState: new Set() };
+  const origPushState = history.pushState;
+  const origReplaceState = history.replaceState;
+
+  history.pushState = function (...args) {
+    origPushState.apply(this, args);
+    for (const cb of historyCallbacks.pushState) cb();
+  };
+  history.replaceState = function (...args) {
+    origReplaceState.apply(this, args);
+    for (const cb of historyCallbacks.replaceState) cb();
+  };
+
   // ─── Utilities ──────────────────────────────────────────────
 
   function sleep(ms) {
@@ -1015,12 +1030,15 @@
     try {
       editorEl.focus();
 
-      // Clear existing content
-      editorEl.innerHTML = '';
+      // Clear existing content safely
+      while (editorEl.firstChild) editorEl.removeChild(editorEl.firstChild);
 
-      // Insert as HTML (preserving newlines as <br> or <p>)
-      const html = value.replace(/\n/g, '<br>');
-      editorEl.innerHTML = html;
+      // Insert as text nodes with <br> for newlines (no innerHTML to avoid XSS)
+      const lines = value.split('\n');
+      lines.forEach((line, i) => {
+        editorEl.appendChild(document.createTextNode(line));
+        if (i < lines.length - 1) editorEl.appendChild(document.createElement('br'));
+      });
 
       // Dispatch events that editors listen for
       editorEl.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
@@ -1033,7 +1051,8 @@
       } catch { /* skip — not all editors support this */ }
 
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[CareerPulse] fillRichText failed:', err.message);
       return false;
     }
   }
@@ -1959,8 +1978,8 @@
       if (result && result.ok) {
         showToast('Job marked as applied in CareerPulse', 'success');
       }
-    } catch {
-      // Backend may not be available — fail silently
+    } catch (err) {
+      console.warn('[CareerPulse] autoTrackApplied failed:', err.message);
     }
   }
 
@@ -1969,11 +1988,8 @@
   function detectSubmission() {
     document.addEventListener('submit', handleSubmission, true);
 
-    const originalPushState = history.pushState;
-    history.pushState = function (...args) {
-      originalPushState.apply(this, args);
-      handleSubmission();
-    };
+    // Register pushState callback via central interceptor
+    historyCallbacks.pushState.add(handleSubmission);
 
     document.addEventListener('click', (e) => {
       try {
@@ -2044,7 +2060,9 @@
 
       // Auto-track this job as applied
       autoTrackApplied();
-    } catch { /* skip */ }
+    } catch (err) {
+      console.warn('[CareerPulse] handleSubmission failed:', err.message);
+    }
   }
 
   // ─── Custom Q&A matching ─────────────────────────────────────
@@ -2094,7 +2112,8 @@
       const qaResult = await chrome.runtime.sendMessage({ type: 'getCustomQA' });
       if (!qaResult || !qaResult.ok || !Array.isArray(qaResult.data)) return mappings;
       qaEntries = qaResult.data;
-    } catch {
+    } catch (err) {
+      console.warn('[CareerPulse] applyCustomQA failed:', err.message);
       return mappings;
     }
 
@@ -2147,7 +2166,9 @@
         if (atsAdapter?.getExtraFields) {
           try {
             adapterFields = atsAdapter.getExtraFields(document);
-          } catch { /* skip */ }
+          } catch (err) {
+            console.warn('[CareerPulse] ATS getExtraFields failed:', err.message);
+          }
         }
 
         // Extract structured fields for more reliable AI analysis
@@ -2359,29 +2380,37 @@
     });
 
     // Dismiss button: suppress for this hostname
-    badgeEl.querySelector('.cp-auto-badge-dismiss').addEventListener('click', (e) => {
+    badgeEl.querySelector('.cp-auto-badge-dismiss').addEventListener('click', async (e) => {
       e.stopPropagation();
       const host = window.location.hostname;
-      chrome.storage.local.get({ dismissedHosts: [] }, (result) => {
+      try {
+        const result = await chrome.storage.local.get({ dismissedHosts: [] });
         const hosts = result.dismissedHosts;
         if (!hosts.includes(host)) {
           hosts.push(host);
-          chrome.storage.local.set({ dismissedHosts: hosts });
+          // Cap dismissed hosts to prevent unbounded storage growth
+          if (hosts.length > 500) hosts.splice(0, hosts.length - 500);
+          await chrome.storage.local.set({ dismissedHosts: hosts });
         }
-      });
+      } catch (err) {
+        console.warn('[CareerPulse] Failed to save dismissed host:', err.message);
+      }
       removeBadge();
     });
   }
 
-  function tryShowBadge() {
+  async function tryShowBadge() {
     const confidence = detectApplicationForm();
     if (confidence === 'none') return;
 
-    chrome.storage.local.get({ dismissedHosts: [] }, (result) => {
+    try {
+      const result = await chrome.storage.local.get({ dismissedHosts: [] });
       const host = window.location.hostname;
       if (result.dismissedHosts.includes(host)) return;
       showBadge(confidence);
-    });
+    } catch (err) {
+      console.warn('[CareerPulse] Failed to check dismissed hosts:', err.message);
+    }
   }
 
   // Run detection after page load (with delay for SPA content)
@@ -2462,18 +2491,11 @@
     window.addEventListener('popstate', multiPageState.popstateHandler);
     window.addEventListener('hashchange', multiPageState.hashchangeHandler);
 
-    // Patch history.pushState and history.replaceState for SPA navigation
-    multiPageState.origPushState = history.pushState;
-    history.pushState = function (...args) {
-      multiPageState.origPushState.apply(this, args);
-      onPageChange();
-    };
-
-    multiPageState.origReplaceState = history.replaceState;
-    history.replaceState = function (...args) {
-      multiPageState.origReplaceState.apply(this, args);
-      onPageChange();
-    };
+    // Register history callbacks via central interceptor
+    multiPageState.pushStateCallback = () => onPageChange();
+    multiPageState.replaceStateCallback = () => onPageChange();
+    historyCallbacks.pushState.add(multiPageState.pushStateCallback);
+    historyCallbacks.replaceState.add(multiPageState.replaceStateCallback);
   }
 
   function stopMultiPageTracking() {
@@ -2491,12 +2513,12 @@
       window.removeEventListener('hashchange', multiPageState.hashchangeHandler);
     }
 
-    // Restore original history methods
-    if (multiPageState.origPushState) {
-      history.pushState = multiPageState.origPushState;
+    // Unregister history callbacks
+    if (multiPageState.pushStateCallback) {
+      historyCallbacks.pushState.delete(multiPageState.pushStateCallback);
     }
-    if (multiPageState.origReplaceState) {
-      history.replaceState = multiPageState.origReplaceState;
+    if (multiPageState.replaceStateCallback) {
+      historyCallbacks.replaceState.delete(multiPageState.replaceStateCallback);
     }
 
     multiPageState = null;
@@ -2627,6 +2649,9 @@
   // ─── Message handler ──────────────────────────────────────────
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Validate message origin — only accept messages from this extension
+    if (sender.id !== chrome.runtime.id) return false;
+
     try {
       switch (message.type) {
         case 'startFill':
