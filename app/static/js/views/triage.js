@@ -125,6 +125,7 @@ function renderTriageCard() {
 }
 
 async function triageKeep() {
+    if (!await requireAIAndResume()) return;
     const job = triageJobs[triageIndex];
     triageUndoStack.push({ index: triageIndex, action: 'keep', jobId: job.id });
     try {

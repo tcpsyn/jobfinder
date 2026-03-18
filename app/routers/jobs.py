@@ -128,7 +128,7 @@ async def estimate_salary_endpoint(request: Request, job_id: int):
         raise HTTPException(404, "Job not found")
     client = getattr(request.app.state, "ai_client", None)
     if not client:
-        raise HTTPException(503, "No AI provider configured")
+        raise HTTPException(503, "No AI provider configured. Go to Settings → AI to set one up.")
     if job.get("salary_min") and job.get("salary_max"):
         return {"ok": True, "already_known": True,
                 "min": job["salary_min"], "max": job["salary_max"]}

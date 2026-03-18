@@ -190,13 +190,14 @@ a:hover {
     top: 100%;
     right: 0;
     width: 360px;
+    max-width: calc(100vw - 16px);
     max-height: 420px;
     overflow-y: auto;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-lg);
-    z-index: 200;
+    z-index: 201;
     margin-top: 4px;
 }
 
@@ -340,9 +341,9 @@ a:hover {
 }
 
 .btn-icon {
-    padding: 6px;
-    width: 32px;
-    height: 32px;
+    padding: 10px;
+    width: 44px;
+    height: 44px;
 }
 
 /* === Cards === */
@@ -1863,7 +1864,7 @@ a:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 200;
+    z-index: 202;
 }
 
 .modal-content {

@@ -133,6 +133,7 @@ async function renderStats(container) {
             }, 2000);
         }
         scoreBtn.addEventListener('click', async () => {
+            if (!await requireAIAndResume()) return;
             scoreBtn.disabled = true;
             scoreBtn.innerHTML = '<span class="spinner"></span> Starting...';
             try {
@@ -509,6 +510,7 @@ async function renderStats(container) {
 
         // Career analyze button
         document.getElementById('career-analyze-btn')?.addEventListener('click', async () => {
+            if (!await requireAIAndResume()) return;
             const btn = document.getElementById('career-analyze-btn');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> Analyzing...';

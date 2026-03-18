@@ -142,10 +142,16 @@ async def enrich_jobs(request: Request):
 @router.post("/score")
 async def trigger_score(request: Request):
     app = request.app
+    if not getattr(app.state, "ai_client", None):
+        return {"status": "skipped", "reason": "No AI provider configured. Go to Settings → AI to set one up."}
 
     async def _run_scoring():
         try:
-            await app.state.score_unscored(app.state.db)
+            await asyncio.wait_for(
+                app.state.score_unscored(app.state.db), timeout=1800
+            )
+        except asyncio.TimeoutError:
+            logger.error("Background scoring timed out after 30 minutes")
         except Exception:
             logger.exception("Background scoring failed")
 

@@ -30,7 +30,7 @@ async function renderNetwork(container) {
                                 ${c.company ? `<div style="font-size:0.8125rem;color:var(--text-tertiary)">${escapeHtml(c.company)}</div>` : ''}
                                 <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
                                     ${c.email ? `<span style="font-size:0.75rem;color:var(--accent)">${escapeHtml(c.email)}</span>` : ''}
-                                    ${c.linkedin_url ? `<a href="${escapeHtml(c.linkedin_url)}" target="_blank" style="font-size:0.75rem">LinkedIn</a>` : ''}
+                                    ${c.linkedin_url ? `<a href="${sanitizeUrl(c.linkedin_url)}" target="_blank" rel="noopener noreferrer" style="font-size:0.75rem">LinkedIn</a>` : ''}
                                 </div>
                             </div>
                         `).join('')}
@@ -122,7 +122,7 @@ async function renderNetwork(container) {
                                     <div style="display:flex;gap:12px;margin-top:8px;font-size:0.8125rem">
                                         ${contact.email ? `<span>${escapeHtml(contact.email)}</span>` : ''}
                                         ${contact.phone ? `<span>${escapeHtml(contact.phone)}</span>` : ''}
-                                        ${contact.linkedin_url ? `<a href="${escapeHtml(contact.linkedin_url)}" target="_blank">LinkedIn</a>` : ''}
+                                        ${contact.linkedin_url ? `<a href="${sanitizeUrl(contact.linkedin_url)}" target="_blank" rel="noopener noreferrer">LinkedIn</a>` : ''}
                                     </div>
                                     ${contact.notes ? `<div style="margin-top:8px;font-size:0.8125rem;color:var(--text-secondary)">${escapeHtml(contact.notes)}</div>` : ''}
                                 </div>

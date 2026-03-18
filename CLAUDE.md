@@ -18,10 +18,10 @@ docker compose up -d
 - Vanilla JS frontend (served from `app/static/`)
 
 ## Key Architecture
-- `app/main.py` — FastAPI app assembler: `create_app` factory + lifespan (352 lines)
+- `app/main.py` — FastAPI app assembler: `create_app` factory + lifespan (378 lines)
 - `app/routers/` — API routes split into 10 modules: `jobs.py`, `tailoring.py`, `pipeline.py`, `queue.py`, `contacts.py`, `analytics.py`, `settings.py`, `alerts.py`, `scraping.py`, `autofill.py`
 - `app/database.py` — async SQLite via aiosqlite (37 tables, FK enforcement, WAL mode)
-- `app/scrapers/` — job board scrapers (pluggable, 10+ sources); base class provides retry/backoff, rate limiting, UA rotation
+- `app/scrapers/` — job board scrapers (pluggable, 14 active sources); base class provides retry/backoff, rate limiting, UA rotation
 - `app/matcher.py` — AI-powered job/resume matching (supports resume override)
 - `app/tailoring.py` — generates tailored resumes/cover letters (supports resume override)
 - `app/ai_client.py` — multi-provider AI client (Anthropic, OpenAI, Google, OpenRouter, Ollama)
@@ -58,9 +58,9 @@ Required in `.env` (all optional — can configure via UI instead):
 ```bash
 uv run pytest                             # 504 backend tests
 cd app/static && npx vitest run           # 92 frontend tests
-cd extension && npx vitest run            # 416 extension tests
+cd extension && npx vitest run            # 428 extension tests
 ```
-Total: 1,012 tests
+Total: 1,024 tests
 
 ## Git Remote
 - **GitHub**: `https://github.com/tcpsyn/CareerPulse.git` (origin)

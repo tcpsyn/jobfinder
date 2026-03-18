@@ -2283,7 +2283,7 @@
 
   function hasAtsEmbedContainer() {
     return !!(document.getElementById('grnhse_app')
-      || document.querySelector('[class*="greenhouse"]')
+      || document.querySelector('[class*="grnhse"]')
       || document.querySelector('iframe[id*="grnhse"]'));
   }
 
@@ -2509,8 +2509,6 @@
       lastUrl: location.href,
       observer: null,
       debounceTimer: null,
-      origPushState: null,
-      origReplaceState: null,
       popstateHandler: null,
       hashchangeHandler: null,
     };
@@ -2673,6 +2671,11 @@
   }
 
   async function startQueueFill(message) {
+    // If we're the parent frame with an ATS embed, skip — the iframe handles filling
+    if (!isInIframe() && (hasAtsIframe() || hasAtsEmbedContainer() || hasAtsUrlParam())) {
+      return;
+    }
+
     queueContext = {
       queueItemId: message.queueItemId,
       jobId: message.jobId,
@@ -2694,14 +2697,16 @@
     await startFillFlow();
 
     // Report fill completed (NOT submitted — user must explicitly submit)
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'reportFillStatus',
-        queueItemId: queueContext.queueItemId,
-        status: 'filled',
-        details: { state: currentState },
-      });
-    } catch { /* skip */ }
+    if (queueContext) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'reportFillStatus',
+          queueItemId: queueContext.queueItemId,
+          status: 'filled',
+          details: { state: currentState },
+        });
+      } catch { /* skip */ }
+    }
   }
 
   // ─── Message handler ──────────────────────────────────────────

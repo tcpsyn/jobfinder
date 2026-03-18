@@ -92,6 +92,7 @@ async function renderFeed(container) {
     }
 
     let debounceTimer;
+    registerViewCleanup(() => clearTimeout(debounceTimer));
     const reload = () => {
         currentOffset = 0;
         saveFilterState();
@@ -299,6 +300,7 @@ function updateBatchBar() {
 }
 
 async function batchPrepare() {
+    if (!await requireAIAndResume()) return;
     const ids = [...selectedJobIds];
     if (!ids.length) return;
     const btn = document.getElementById('batch-prepare-btn');
@@ -396,7 +398,8 @@ async function renderComparison(container, jobIds) {
                 label: 'Status',
                 render: job => {
                     const s = job.application?.status;
-                    return s ? `<span class="status-badge status-${s}">${s}</span>` : '<span style="color:var(--text-tertiary)">None</span>';
+                    const safeS = s ? s.replace(/[^a-z0-9-]/gi, '') : '';
+                    return safeS ? `<span class="status-badge status-${safeS}">${escapeHtml(s)}</span>` : '<span style="color:var(--text-tertiary)">None</span>';
                 }
             },
             {
@@ -416,8 +419,6 @@ async function renderComparison(container, jobIds) {
                 }
             },
         ];
-
-        const colCount = jobs.length;
 
         container.innerHTML = `
             <div class="detail-header">
@@ -485,7 +486,8 @@ function createJobCard(job) {
     const salary = formatSalary(job.salary_min, job.salary_max);
     const scoreClass = getScoreClass(score);
     const newTag = isNew(job.created_at) ? `<span class="new-indicator">New</span>` : '';
-    const statusTag = job.app_status ? `<span class="status-badge status-${job.app_status}">${job.app_status}</span>` : '';
+    const safeStatus = job.app_status ? job.app_status.replace(/[^a-z0-9-]/gi, '') : '';
+    const statusTag = safeStatus ? `<span class="status-badge status-${safeStatus}">${escapeHtml(job.app_status)}</span>` : '';
     const freshness = getFreshness(job);
     const freshnessHtml = freshness ? `<span class="freshness-badge ${freshness.class}">${freshness.label}</span>` : '';
 

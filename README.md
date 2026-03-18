@@ -4,7 +4,7 @@ Self-hosted job discovery and application tool. Scrapes jobs from multiple board
 
 ## Features
 
-- **Multi-source scraping** — LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy, Indeed, RemoteOK, Himalayas
+- **Multi-source scraping** — 14 sources: LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy, Indeed, RemoteOK, Himalayas, Wellfound, BuiltIn, Greenhouse, Adzuna
 - **AI-powered matching** — Scores jobs 0-100 against your resume with reasons and concerns
 - **Chrome extension autofill** — Auto-fills job applications on any ATS (Workday, Greenhouse, Lever, iCIMS, Taleo, custom forms) using AI
 - **Comprehensive profile** — Personal info, work history, education, skills, certifications, languages, references, EEO responses
@@ -147,7 +147,7 @@ The extension requires profile data in CareerPulse. Fill out your profile in **S
 
 ```
 FastAPI (async)
-├── app/main.py — create_app factory + lifespan (352 lines)
+├── app/main.py — create_app factory + lifespan (378 lines)
 ├── app/routers/ — 10 APIRouter modules
 │   ├── jobs.py, tailoring.py, pipeline.py, queue.py, contacts.py
 │   └── analytics.py, settings.py, alerts.py, scraping.py, autofill.py
@@ -187,6 +187,10 @@ FastAPI (async)
 | Indeed | RSS feed | Keyword + location filtering |
 | RemoteOK | REST API | Client-side keyword filtering |
 | Himalayas | REST API | Paginated, client-side keyword filtering |
+| Wellfound | HTML scrape | May encounter 403s (aggressive bot protection) |
+| BuiltIn | HTML scrape | Category-based, remote-only paths |
+| Greenhouse | REST API | Scrapes curated list of known company boards |
+| Adzuna | REST API | Requires Adzuna API key (optional) |
 
 Jobs are deduplicated by SHA-256 hash of normalized title + company + URL.
 
@@ -372,11 +376,11 @@ uv run pytest
 # Frontend (92 tests)
 cd app/static && npx vitest run
 
-# Extension (416 tests)
+# Extension (428 tests)
 cd extension && npx vitest run
 ```
 
-**Total: 1,012 tests** across backend, frontend, and extension.
+**Total: 1,024 tests** across backend, frontend, and extension.
 
 Backend covers: scrapers, database, API endpoints, matcher, tailor, resume analyzer, AI client, contact finder, apply link finder, salary estimator, company research, digest, profile CRUD, autofill, custom Q&A, saved views, response tracking, alerts, application queue, follow-up templates, contacts CRM, career advisor, offers, and predictions.
 

@@ -40,9 +40,9 @@ function renderSettingsShell(container) {
     container.innerHTML = `
         <h1 style="font-size:1.5rem;font-weight:700;letter-spacing:-0.02em;margin-bottom:24px">Settings</h1>
         <div class="settings-tab-bar" role="tablist">
-            ${tabs.map(t => `<button class="settings-tab${settingsActiveTab === t.id ? ' settings-tab-active' : ''}" data-tab="${t.id}" role="tab" aria-selected="${settingsActiveTab === t.id}">${t.label}</button>`).join('')}
+            ${tabs.map(t => `<button id="settings-tab-${t.id}" class="settings-tab${settingsActiveTab === t.id ? ' settings-tab-active' : ''}" data-tab="${t.id}" role="tab" aria-selected="${settingsActiveTab === t.id}">${t.label}</button>`).join('')}
         </div>
-        <div id="settings-tab-content" role="tabpanel"></div>
+        <div id="settings-tab-content" role="tabpanel" aria-labelledby="settings-tab-${settingsActiveTab}"></div>
     `;
 
     container.querySelectorAll('.settings-tab').forEach(btn => {
@@ -53,6 +53,8 @@ function renderSettingsShell(container) {
                 b.classList.toggle('settings-tab-active', isActive);
                 b.setAttribute('aria-selected', String(isActive));
             });
+            const panel = document.getElementById('settings-tab-content');
+            if (panel) panel.setAttribute('aria-labelledby', `settings-tab-${settingsActiveTab}`);
             renderActiveTab(container);
         });
     });
@@ -1516,6 +1518,12 @@ function renderTabData(container) {
             <div id="scraper-schedule-list"><span class="spinner"></span></div>
         </div>
 
+        <div class="card" style="padding:24px;margin-bottom:24px">
+            <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px">Setup Guide</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;font-size:0.875rem">Re-run the onboarding wizard to configure your profile, resume, and AI provider.</p>
+            <button class="btn btn-secondary" id="rerun-onboarding-btn">Launch Setup Guide</button>
+        </div>
+
         <div class="card" style="padding:24px;margin-bottom:24px;border-left:4px solid var(--danger, #ef4444)">
             <h2 style="font-size:1.125rem;font-weight:600;margin-bottom:16px;color:var(--danger, #ef4444)">Danger Zone</h2>
             <div style="display:flex;flex-direction:column;gap:16px">
@@ -1624,6 +1632,14 @@ function renderTabData(container) {
             settingsData = {};
             await renderSettings(document.getElementById('app'));
         } catch (err) { showToast(err.message, 'error'); }
+    });
+
+    // Onboarding re-entry
+    document.getElementById('rerun-onboarding-btn').addEventListener('click', () => {
+        localStorage.removeItem('careerpulse_onboarded');
+        invalidateSetupStatus();
+        showToast('Setup wizard will appear on next page load', 'info');
+        location.reload();
     });
 
     // Export profile

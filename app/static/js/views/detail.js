@@ -297,6 +297,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const predictBtn = document.getElementById('predict-success-btn');
     if (predictBtn) {
         predictBtn.addEventListener('click', async () => {
+            if (!await requireAI()) return;
             predictBtn.disabled = true;
             predictBtn.innerHTML = '<span class="spinner"></span> Predicting...';
             try {
@@ -327,6 +328,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const estSalaryBtn = document.getElementById('estimate-salary-btn');
     if (estSalaryBtn) {
         estSalaryBtn.addEventListener('click', async () => {
+            if (!await requireAI()) return;
             estSalaryBtn.disabled = true;
             estSalaryBtn.innerHTML = '<span class="spinner"></span>';
             try {
@@ -370,6 +372,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     }
 
     document.getElementById('prepare-btn').addEventListener('click', async () => {
+        if (!await requireAIAndResume()) return;
         const btn = document.getElementById('prepare-btn');
         const resumeSelect = document.getElementById('resume-select');
         const resumeId = resumeSelect ? parseInt(resumeSelect.value) : null;
@@ -508,6 +511,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const emailBtn = document.getElementById('email-btn');
     if (emailBtn) {
         emailBtn.addEventListener('click', async () => {
+            if (!await requireAI()) return;
             emailBtn.disabled = true;
             emailBtn.innerHTML = '<span class="spinner"></span> Drafting...';
             try {
@@ -529,6 +533,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const genCoverLetterBtn = document.getElementById('generate-cover-letter-btn');
     if (genCoverLetterBtn) {
         genCoverLetterBtn.addEventListener('click', async () => {
+            if (!await requireAIAndResume()) return;
             genCoverLetterBtn.disabled = true;
             genCoverLetterBtn.innerHTML = '<span class="spinner"></span> Generating...';
             try {
@@ -555,6 +560,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const findContactBtn = document.getElementById('find-contact-btn');
     if (findContactBtn) {
         findContactBtn.addEventListener('click', async () => {
+            if (!await requireAI()) return;
             findContactBtn.disabled = true;
             findContactBtn.innerHTML = '<span class="spinner"></span> Searching...';
             try {
@@ -598,6 +604,7 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
     const genPrepBtn = document.getElementById('generate-interview-prep-btn');
     if (genPrepBtn) {
         genPrepBtn.addEventListener('click', async () => {
+            if (!await requireAI()) return;
             genPrepBtn.disabled = true;
             genPrepBtn.innerHTML = '<span class="spinner"></span> Generating...';
             try {
@@ -771,6 +778,7 @@ function attachCoverLetterListeners(jobId) {
     const regenBtn = document.getElementById('regenerate-cover-letter-btn');
     if (regenBtn) {
         regenBtn.addEventListener('click', async () => {
+            if (!await requireAIAndResume()) return;
             regenBtn.disabled = true;
             regenBtn.innerHTML = '<span class="spinner"></span> Regenerating...';
             try {

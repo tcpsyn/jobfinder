@@ -1103,6 +1103,24 @@ describe('detectApplicationForm', () => {
     const confidence = api.detectApplicationForm();
     expect(confidence).toBe('high');
   });
+
+  it('returns high confidence when #grnhse_app container exists (Greenhouse embed)', () => {
+    const div = document.createElement('div');
+    div.id = 'grnhse_app';
+    document.body.appendChild(div);
+
+    const confidence = api.detectApplicationForm();
+    expect(confidence).toBe('high');
+  });
+
+  it('returns high confidence when iframe with greenhouse src exists', () => {
+    const iframe = document.createElement('iframe');
+    iframe.id = 'grnhse_iframe';
+    document.body.appendChild(iframe);
+
+    const confidence = api.detectApplicationForm();
+    expect(confidence).toBe('high');
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -1698,6 +1716,58 @@ describe('startFillFlow overall timeout', () => {
     const statusEl = overlay.querySelector('.cp-autofill-overlay-status');
     expect(statusEl.textContent).toMatch(/timed?\s*out|too long/i);
   }, 15000);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// startFillFlow ATS iframe delegation
+// ═══════════════════════════════════════════════════════════════
+
+describe('startFillFlow ATS iframe delegation', () => {
+  it('silently returns when in top frame with Greenhouse embed container', async () => {
+    // Simulate being in a top frame (window.self === window.top by default in jsdom)
+    const container = document.createElement('div');
+    container.id = 'grnhse_app';
+    document.body.appendChild(container);
+
+    await api.startFillFlow();
+
+    // Should NOT show an overlay or error since an ATS embed was detected
+    const overlay = document.getElementById('cp-autofill-overlay');
+    expect(overlay).toBeNull();
+  });
+
+  it('silently returns when in top frame with grnhse iframe', async () => {
+    const iframe = document.createElement('iframe');
+    iframe.id = 'grnhse_iframe';
+    document.body.appendChild(iframe);
+
+    await api.startFillFlow();
+
+    const overlay = document.getElementById('cp-autofill-overlay');
+    expect(overlay).toBeNull();
+  });
+
+  it('silently returns when in top frame with gh_jid URL param', async () => {
+    // Simulate Greenhouse URL param without any DOM elements yet
+    const origLocation = window.location.href;
+    Object.defineProperty(window, 'location', {
+      value: new URL('https://careers.example.com/detail/123/?gh_jid=456'),
+      writable: true,
+      configurable: true,
+    });
+
+    await api.startFillFlow();
+
+    const overlay = document.getElementById('cp-autofill-overlay');
+    expect(overlay).toBeNull();
+
+    // Restore
+    Object.defineProperty(window, 'location', {
+      value: new URL(origLocation),
+      writable: true,
+      configurable: true,
+    });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════

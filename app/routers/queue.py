@@ -36,7 +36,9 @@ async def get_queue(request: Request, status: str | None = Query(None)):
 async def prepare_all_queued(request: Request):
     tailor = request.app.state.tailor
     if not tailor:
-        raise HTTPException(503, "Tailor not available")
+        if not getattr(request.app.state, "ai_client", None):
+            raise HTTPException(503, "No AI provider configured. Go to Settings → AI to set one up.")
+        raise HTTPException(503, "No resume uploaded. Go to Settings → Resume to upload one.")
     db = request.app.state.db
     queued = await db.get_queue(status="queued")
     prepared = 0

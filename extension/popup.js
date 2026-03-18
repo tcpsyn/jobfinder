@@ -61,6 +61,11 @@ fillBtn.addEventListener('click', async () => {
 saveUrlBtn.addEventListener('click', async () => {
   let url = serverUrlInput.value.trim().replace(/\/+$/, '');
   if (!url) return;
+  if (!/^https?:\/\//i.test(url)) {
+    statusDot.className = 'status-dot disconnected';
+    statusText.textContent = 'URL must start with http:// or https://';
+    return;
+  }
   await chrome.storage.local.set({ serverUrl: url });
   settingsLink.href = `${url}/#/settings`;
   await checkConnection();

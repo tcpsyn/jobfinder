@@ -40,7 +40,7 @@ async def analyze_skill_gaps(request: Request):
     db = request.app.state.db
     client = getattr(request.app.state, "ai_client", None)
     if not client:
-        raise HTTPException(503, "AI client not configured")
+        raise HTTPException(503, "No AI provider configured. Go to Settings → AI to set one up.")
     gap_data = await db.get_skill_gap_data(min_score=50, max_score=80)
     if gap_data["job_count"] == 0:
         return {"skills": [], "message": "No jobs in the 50-80 score range to analyze"}
@@ -109,7 +109,7 @@ async def predict_success(request: Request, job_id: int):
     from app.predictor import predict_success as _predict
     client = getattr(request.app.state, "ai_client", None)
     if not client:
-        raise HTTPException(503, "AI client not configured")
+        raise HTTPException(503, "No AI provider configured. Go to Settings → AI to set one up.")
     db = request.app.state.db
     job = await db.get_job(job_id)
     if not job:
@@ -137,7 +137,7 @@ async def analyze_career(request: Request):
     from app.career_advisor import analyze_career as _analyze
     client = getattr(request.app.state, "ai_client", None)
     if not client:
-        raise HTTPException(503, "AI client not configured")
+        raise HTTPException(503, "No AI provider configured. Go to Settings → AI to set one up.")
     db = request.app.state.db
     profile = await db.get_full_profile()
     work = profile.get("work_history", [])

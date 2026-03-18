@@ -200,3 +200,62 @@ function showModal({ title, message, input, confirmText, cancelText, danger }) {
         });
     });
 }
+
+// === Setup Guards ===
+let _cachedSetupStatus = null;
+let _setupStatusExpiry = 0;
+
+async function getSetupStatus() {
+    if (_cachedSetupStatus && Date.now() < _setupStatusExpiry) return _cachedSetupStatus;
+    try {
+        const [resumesData, aiSettings] = await Promise.all([
+            api.request('GET', '/api/resumes'),
+            api.getAISettings(),
+        ]);
+        _cachedSetupStatus = {
+            hasResume: (resumesData.resumes || []).length > 0,
+            hasAI: !!(aiSettings.provider && aiSettings.api_key),
+        };
+        _setupStatusExpiry = Date.now() + 30000;
+    } catch {
+        _cachedSetupStatus = { hasResume: false, hasAI: false };
+        _setupStatusExpiry = Date.now() + 5000;
+    }
+    return _cachedSetupStatus;
+}
+
+function invalidateSetupStatus() {
+    _cachedSetupStatus = null;
+    _setupStatusExpiry = 0;
+}
+
+async function requireAI() {
+    const status = await getSetupStatus();
+    if (!status.hasAI) {
+        showToast('AI provider not configured. Go to Settings \u2192 AI & Integrations to set up.', 'error');
+        return false;
+    }
+    return true;
+}
+
+async function requireResume() {
+    const status = await getSetupStatus();
+    if (!status.hasResume) {
+        showToast('No resume uploaded. Go to Settings \u2192 Resumes to upload one.', 'error');
+        return false;
+    }
+    return true;
+}
+
+async function requireAIAndResume() {
+    const status = await getSetupStatus();
+    if (!status.hasAI) {
+        showToast('AI provider not configured. Go to Settings \u2192 AI & Integrations to set up.', 'error');
+        return false;
+    }
+    if (!status.hasResume) {
+        showToast('No resume uploaded. Go to Settings \u2192 Resumes to upload one.', 'error');
+        return false;
+    }
+    return true;
+}

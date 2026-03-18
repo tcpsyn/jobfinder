@@ -77,6 +77,37 @@ _COLUMN_ALLOWLISTS = {
         "name", "normalized_name", "website", "description", "size",
         "industry", "glassdoor_rating", "updated_at",
     },
+    "jobs": {
+        "title", "company", "location", "salary_min", "salary_max",
+        "description", "url", "posted_date", "application_method",
+        "contact_email", "dismissed", "hiring_manager_name",
+        "hiring_manager_email", "hiring_manager_title",
+        "contact_lookup_done", "apply_url", "salary_estimate_min",
+        "salary_estimate_max", "salary_confidence",
+        "description_enriched", "enrichment_status", "enrichment_attempts",
+    },
+    "custom_qa": {
+        "question_pattern", "category", "answer", "times_used", "last_used",
+    },
+    "resumes": {
+        "name", "resume_text", "is_default", "search_terms", "job_titles",
+        "key_skills", "seniority", "summary", "updated_at",
+    },
+    "job_alerts": {
+        "name", "filters", "min_score", "enabled", "notify_method",
+        "last_checked_at",
+    },
+    "follow_up_templates": {
+        "name", "days_after", "template_text", "is_default",
+    },
+    "contacts": {
+        "name", "email", "phone", "company", "role", "linkedin_url",
+        "notes", "updated_at",
+    },
+    "offers": {
+        "job_id", "base", "equity", "bonus", "pto_days", "remote_days",
+        "health_value", "retirement_match", "relocation", "location", "notes",
+    },
 }
 
 _VALID_REPLACE_TABLES = {
@@ -1255,6 +1286,7 @@ class Database:
         return [dict(r) for r in await cursor.fetchall()]
 
     async def update_job_contact(self, job_id: int, **fields):
+        _validate_columns("jobs", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [job_id]
         await self.db.execute(f"UPDATE jobs SET {sets} WHERE id = ?", vals)
@@ -1824,6 +1856,7 @@ class Database:
 
     async def save_custom_qa(self, entry: dict) -> int:
         entry_id = entry.pop("id", None)
+        _validate_columns("custom_qa", entry.keys())
         if entry_id:
             sets = ", ".join(f"{k} = ?" for k in entry)
             vals = list(entry.values()) + [entry_id]
@@ -2080,6 +2113,7 @@ class Database:
         if "is_default" in fields:
             fields["is_default"] = int(fields["is_default"])
         fields["updated_at"] = now
+        _validate_columns("resumes", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [resume_id]
         await self.db.execute(f"UPDATE resumes SET {sets} WHERE id = ?", vals)
@@ -2281,6 +2315,7 @@ class Database:
             fields["filters"] = json.dumps(fields["filters"])
         if "enabled" in fields:
             fields["enabled"] = int(fields["enabled"])
+        _validate_columns("job_alerts", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [alert_id]
         await self.db.execute(f"UPDATE job_alerts SET {sets} WHERE id = ?", vals)
@@ -2467,6 +2502,7 @@ class Database:
             if fields["is_default"]:
                 await self.db.execute("UPDATE follow_up_templates SET is_default = 0")
             fields["is_default"] = int(fields["is_default"])
+        _validate_columns("follow_up_templates", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [template_id]
         await self.db.execute(f"UPDATE follow_up_templates SET {sets} WHERE id = ?", vals)
@@ -2527,6 +2563,7 @@ class Database:
         if not existing:
             return False
         fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _validate_columns("contacts", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [contact_id]
         await self.db.execute(f"UPDATE contacts SET {sets} WHERE id = ?", vals)
@@ -2670,6 +2707,7 @@ class Database:
         existing = await self.get_offer(offer_id)
         if not existing:
             return False
+        _validate_columns("offers", fields.keys())
         sets = ", ".join(f"{k} = ?" for k in fields)
         vals = list(fields.values()) + [offer_id]
         await self.db.execute(f"UPDATE offers SET {sets} WHERE id = ?", vals)

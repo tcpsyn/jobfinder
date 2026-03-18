@@ -198,6 +198,24 @@ describe('save URL', () => {
     expect(setCalls).toHaveLength(0);
   });
 
+  it('rejects non-http URL and shows error', async () => {
+    loadPopup();
+    await vi.waitFor(() => {
+      expect(document.getElementById('fillBtn').disabled).toBe(false);
+    });
+
+    const urlInput = document.getElementById('serverUrl');
+    urlInput.value = 'ftp://evil.com';
+    document.getElementById('saveUrlBtn').click();
+
+    await new Promise(r => setTimeout(r, 50));
+    // Should NOT save
+    expect(globalThis.chrome.storage.local.set).not.toHaveBeenCalled();
+    // Should show error message
+    const statusText = document.getElementById('statusText');
+    expect(statusText.textContent).toMatch(/http.*https/i);
+  });
+
   it('updates settings link href after save', async () => {
     loadPopup();
     await vi.waitFor(() => {
