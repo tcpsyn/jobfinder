@@ -2140,6 +2140,12 @@
       // Remove the auto-detection badge if present
       removeBadge();
 
+      // If we're in the top frame and there are ATS embed/iframe signals, bail
+      // silently — the iframe's content script handles filling.
+      if (!isInIframe() && (hasAtsIframe() || hasAtsEmbedContainer() || hasAtsUrlParam())) {
+        return;
+      }
+
       currentState = 'analyzing';
 
       // Detect ATS-specific adapter
@@ -2173,15 +2179,6 @@
 
         // Extract structured fields for more reliable AI analysis
         const structuredFields = extractFormData(formRoot);
-
-        // If we're in the top frame with no local form fields and there's an ATS
-        // iframe/embed, bail silently — the iframe's content script handles filling.
-        if (!structuredFields.length && !isInIframe()
-            && (hasAtsIframe() || hasAtsEmbedContainer() || hasAtsUrlParam())) {
-          removeOverlay();
-          currentState = 'idle';
-          return;
-        }
 
         // Debug: log extracted fields so we can diagnose fill issues
         console.log('[CareerPulse] Extracted fields:', structuredFields.map(f => ({
@@ -2433,7 +2430,7 @@
       removeBadge();
       // If we're on a parent page with an ATS iframe, broadcast startFill via
       // the background script so the iframe's content script picks it up.
-      if (!isInIframe() && (hasAtsIframe() || hasAtsEmbedContainer())) {
+      if (!isInIframe() && (hasAtsIframe() || hasAtsEmbedContainer() || hasAtsUrlParam())) {
         chrome.runtime.sendMessage({ type: 'broadcastStartFill' });
       } else {
         startFillFlow();
