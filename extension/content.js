@@ -2174,6 +2174,15 @@
         // Extract structured fields for more reliable AI analysis
         const structuredFields = extractFormData(formRoot);
 
+        // If we're in the top frame with no local form fields and there's an ATS
+        // iframe/embed, bail silently — the iframe's content script handles filling.
+        if (!structuredFields.length && !isInIframe()
+            && (hasAtsIframe() || hasAtsEmbedContainer() || hasAtsUrlParam())) {
+          removeOverlay();
+          currentState = 'idle';
+          return;
+        }
+
         // Debug: log extracted fields so we can diagnose fill issues
         console.log('[CareerPulse] Extracted fields:', structuredFields.map(f => ({
           selector: f.selector, tag: f.tag, type: f.type, label: f.label,
@@ -2251,6 +2260,47 @@
     }
   }
 
+  // ─── ATS iframe / embed detection ───────────────────────────
+
+  const ATS_IFRAME_PATTERNS = [
+    /(?:boards|job-boards)\.greenhouse\.io/i,
+    /jobs\.lever\.co/i,
+    /icims\.com/i,
+    /taleo\.net/i,
+  ];
+
+  const ATS_EMBED_URL_PARAMS = ['gh_jid']; // Greenhouse job ID in parent page URL
+
+  function hasAtsIframe() {
+    try {
+      const iframes = document.querySelectorAll('iframe');
+      for (const iframe of iframes) {
+        const src = iframe.src || '';
+        for (const pattern of ATS_IFRAME_PATTERNS) {
+          if (pattern.test(src)) return true;
+        }
+      }
+    } catch { /* skip */ }
+    return false;
+  }
+
+  function hasAtsEmbedContainer() {
+    return !!(document.getElementById('grnhse_app')
+      || document.querySelector('[class*="greenhouse"]')
+      || document.querySelector('iframe[id*="grnhse"]'));
+  }
+
+  function hasAtsUrlParam() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return ATS_EMBED_URL_PARAMS.some(p => params.has(p));
+    } catch { return false; }
+  }
+
+  function isInIframe() {
+    try { return window.self !== window.top; } catch { return true; }
+  }
+
   // ─── Application form auto-detection ────────────────────────
 
   function detectApplicationForm() {
@@ -2266,6 +2316,11 @@
       /taleo\.net\/.*\/apply/i,
       /\/careers?\/.*(apply|application)/i,
     ];
+
+    // Parent page with ATS embed signals (e.g. ?gh_jid= for Greenhouse)
+    if (hasAtsUrlParam() || hasAtsEmbedContainer()) {
+      confidence = 'high';
+    }
 
     for (const pattern of highConfidenceUrls) {
       if (pattern.test(url)) {
@@ -2376,7 +2431,13 @@
     // Click main area to start fill
     badgeEl.querySelector('.cp-auto-badge-main').addEventListener('click', () => {
       removeBadge();
-      startFillFlow();
+      // If we're on a parent page with an ATS iframe, broadcast startFill via
+      // the background script so the iframe's content script picks it up.
+      if (!isInIframe() && (hasAtsIframe() || hasAtsEmbedContainer())) {
+        chrome.runtime.sendMessage({ type: 'broadcastStartFill' });
+      } else {
+        startFillFlow();
+      }
     });
 
     // Dismiss button: suppress for this hostname

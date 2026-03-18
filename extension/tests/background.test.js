@@ -82,9 +82,9 @@ function mockFetchFail(status = 500) {
   });
 }
 
-function sendMessage(message) {
+function sendMessage(message, sender = {}) {
   return new Promise((resolve) => {
-    onMessageHandler(message, {}, resolve);
+    onMessageHandler(message, sender, resolve);
   });
 }
 
@@ -474,6 +474,36 @@ describe('keyboard shortcut handler', () => {
     const commandHandler = globalThis.chrome.commands.onCommand.addListener.mock.calls[0][0];
     await commandHandler('start-fill');
     expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(42, { type: 'startFill' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// broadcastStartFill
+// ═══════════════════════════════════════════════════════════════
+
+describe('broadcastStartFill', () => {
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    loadBackground();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('broadcasts startFill to all frames in sender tab', async () => {
+    const result = await sendMessage(
+      { type: 'broadcastStartFill' },
+      { tab: { id: 99 } }
+    );
+    expect(result.ok).toBe(true);
+    expect(globalThis.chrome.tabs.sendMessage).toHaveBeenCalledWith(99, { type: 'startFill' });
+  });
+
+  it('returns error when no tab context', async () => {
+    const result = await sendMessage({ type: 'broadcastStartFill' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('No tab context');
   });
 });
 

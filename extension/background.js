@@ -401,6 +401,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return getQueueStatus();
         case 'reportFillStatus':
           return await reportFillStatus(message.queueItemId, message.status, message.details);
+        case 'broadcastStartFill': {
+          // Broadcast startFill to all frames in the sender's tab
+          const tabId = sender.tab?.id;
+          if (tabId) {
+            chrome.tabs.sendMessage(tabId, { type: 'startFill' });
+            return { ok: true };
+          }
+          return { ok: false, error: 'No tab context' };
+        }
         default:
           return { ok: false, error: `Unknown message type: ${message.type}` };
       }
