@@ -168,6 +168,12 @@ async def score_progress(request: Request):
     return progress
 
 
+@router.post("/dismiss-stale")
+async def dismiss_stale(request: Request):
+    dismissed = await request.app.state.db.auto_dismiss_stale()
+    return {"ok": True, "dismissed": dismissed}
+
+
 @router.post("/clear-jobs")
 async def clear_jobs(request: Request):
     await request.app.state.db.clear_jobs()

@@ -68,6 +68,15 @@ async def lifespan(app: FastAPI):
     else:
         app.state.bg_db = app.state.db
 
+    # Auto-dismiss stale job listings on startup
+    if not testing:
+        try:
+            dismissed = await app.state.db.auto_dismiss_stale()
+            if dismissed:
+                logger.info(f"Startup: auto-dismissed {dismissed} stale jobs")
+        except Exception:
+            logger.exception("Startup auto-dismiss failed")
+
     if not testing:
         from app.config import Settings
         from app.scrapers import ALL_SCRAPERS

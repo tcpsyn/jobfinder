@@ -24,17 +24,20 @@ async def list_jobs(
     region: str | None = Query(None),
     clearance: str | None = Query(None),
     posted_within: str | None = Query(None),
+    include_stale: bool = Query(False),
 ):
     db = request.app.state.db
     config = await db.get_search_config()
     exclude_terms = config.get("exclude_terms", []) if config else []
+    # Default to 30 days if no filter specified and not explicitly requesting stale
+    effective_posted_within = posted_within if posted_within or include_stale else "30d"
     jobs = await db.list_jobs(
         sort_by=sort, limit=limit, offset=offset,
         min_score=min_score, search=search, source=source,
         work_type=work_type, employment_type=employment_type,
         location=location, exclude_terms=exclude_terms,
         region=region, clearance=clearance,
-        posted_within=posted_within,
+        posted_within=effective_posted_within,
     )
     return {"jobs": jobs}
 
