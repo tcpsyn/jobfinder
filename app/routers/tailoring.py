@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -70,7 +71,10 @@ async def download_resume_pdf(request: Request, job_id: int):
         raise HTTPException(404, "No tailored resume prepared for this job")
     pdf_bytes = generate_resume_pdf(application["tailored_resume"])
     await db.add_event(job_id, "pdf_downloaded", "Resume PDF downloaded")
-    filename = f"Resume - {job['company']} - {job['title']}.pdf".replace("/", "-")
+    # Sanitize filename — ASCII only, limit length
+    safe_company = re.sub(r'[^\w\s-]', '', job.get('company', '')).strip()[:40]
+    safe_title = re.sub(r'[^\w\s-]', '', job.get('title', '')).strip()[:40]
+    filename = f"Resume - {safe_company} - {safe_title}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -91,7 +95,9 @@ async def download_cover_letter_pdf(request: Request, job_id: int):
         position=job.get("title", ""),
     )
     await db.add_event(job_id, "pdf_downloaded", "Cover letter PDF downloaded")
-    filename = f"Cover Letter - {job['company']} - {job['title']}.pdf".replace("/", "-")
+    safe_company = re.sub(r'[^\w\s-]', '', job.get('company', '')).strip()[:40]
+    safe_title = re.sub(r'[^\w\s-]', '', job.get('title', '')).strip()[:40]
+    filename = f"Cover Letter - {safe_company} - {safe_title}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
@@ -108,7 +114,9 @@ async def download_resume_docx(request: Request, job_id: int):
         raise HTTPException(404, "No tailored resume prepared for this job")
     docx_bytes = generate_resume_docx(application["tailored_resume"])
     await db.add_event(job_id, "docx_downloaded", "Resume DOCX downloaded")
-    filename = f"Resume - {job['company']} - {job['title']}.docx".replace("/", "-")
+    safe_company = re.sub(r'[^\w\s-]', '', job.get('company', '')).strip()[:40]
+    safe_title = re.sub(r'[^\w\s-]', '', job.get('title', '')).strip()[:40]
+    filename = f"Resume - {safe_company} - {safe_title}.docx"
     return Response(content=docx_bytes,
                     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -130,7 +138,9 @@ async def download_cover_letter_docx(request: Request, job_id: int):
         position=job.get("title", ""),
     )
     await db.add_event(job_id, "docx_downloaded", "Cover letter DOCX downloaded")
-    filename = f"Cover Letter - {job['company']} - {job['title']}.docx".replace("/", "-")
+    safe_company = re.sub(r'[^\w\s-]', '', job.get('company', '')).strip()[:40]
+    safe_title = re.sub(r'[^\w\s-]', '', job.get('title', '')).strip()[:40]
+    filename = f"Cover Letter - {safe_company} - {safe_title}.docx"
     return Response(content=docx_bytes,
                     media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
