@@ -302,7 +302,8 @@ function renderJobDetailContent(container, job, profile = {}, companyInfo = null
             predictBtn.innerHTML = '<span class="spinner"></span> Predicting...';
             try {
                 const pred = await api.request('GET', `/api/jobs/${job.id}/predict-success`);
-                const pct = Math.round((pred.probability || 0) * 100);
+                const raw = pred.probability || 0;
+                const pct = Math.round(raw > 1 ? raw : raw * 100);
                 const color = pct >= 60 ? '#22c55e' : pct >= 40 ? '#f59e0b' : '#ef4444';
                 const badgeContainer = document.getElementById('prediction-badge-container');
                 if (badgeContainer) {
