@@ -1127,7 +1127,7 @@ class Database:
         await self.db.execute("UPDATE jobs SET dismissed = 1 WHERE id = ?", (job_id,))
         await self.db.commit()
 
-    async def auto_dismiss_stale(self, max_age_days: int = 30, no_date_max_days: int = 14) -> int:
+    async def auto_dismiss_stale(self, max_age_days: int = 30, no_date_max_days: int = 30) -> int:
         """Auto-dismiss old jobs. Never dismisses jobs with non-interested applications."""
         cutoff_posted = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         cutoff_created = (datetime.now(timezone.utc) - timedelta(days=no_date_max_days)).isoformat()
