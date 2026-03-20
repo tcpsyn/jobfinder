@@ -1947,12 +1947,18 @@
   function showLearnPrompt(newData) {
     if (!newData.length) return;
 
+    // Remove any existing learn prompt
+    const existing = document.getElementById(`${PREFIX}-learn-prompt`);
+    if (existing) existing.remove();
+
     const promptEl = document.createElement('div');
     promptEl.id = `${PREFIX}-learn-prompt`;
     promptEl.innerHTML = `
-      <div class="${PREFIX}-learn-backdrop"></div>
       <div class="${PREFIX}-learn-modal">
-        <h3 class="${PREFIX}-learn-title">Save ${newData.length} new answer${newData.length > 1 ? 's' : ''} to CareerPulse?</h3>
+        <div class="${PREFIX}-learn-header">
+          <h3 class="${PREFIX}-learn-title">Save ${newData.length} new answer${newData.length > 1 ? 's' : ''} to CareerPulse?</h3>
+          <button class="${PREFIX}-learn-close" aria-label="Close">\u00d7</button>
+        </div>
         <div class="${PREFIX}-learn-list">
           ${newData.map((item, i) => `
             <label class="${PREFIX}-learn-item">
@@ -1987,6 +1993,7 @@
             type: 'saveLearnedData',
             data: { learned_fields: selectedData },
           });
+          showToast(`Saved ${selectedData.length} answer${selectedData.length > 1 ? 's' : ''}`, 'success');
         } catch { /* skip */ }
       }
       promptEl.remove();
@@ -1996,7 +2003,7 @@
       promptEl.remove();
     });
 
-    promptEl.querySelector(`.${PREFIX}-learn-backdrop`).addEventListener('click', () => {
+    promptEl.querySelector(`.${PREFIX}-learn-close`).addEventListener('click', () => {
       promptEl.remove();
     });
   }

@@ -238,31 +238,17 @@
 
 #cp-autofill-learn-prompt {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  bottom: 24px;
+  right: 24px;
   z-index: 9999999;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.cp-autofill-learn-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 .cp-autofill-learn-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 420px;
+  width: 360px;
   max-width: 90vw;
-  max-height: 70vh;
+  max-height: 50vh;
   background: #18181b;
   border: 1px solid #3f3f46;
   border-radius: 12px;
@@ -270,18 +256,40 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
 }
 
-.cp-autofill-learn-title {
-  font-size: 15px;
-  font-weight: 600;
-  padding: 16px 20px;
-  margin: 0;
+.cp-autofill-learn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
   border-bottom: 1px solid #27272a;
 }
 
+.cp-autofill-learn-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.cp-autofill-learn-close {
+  background: none;
+  border: none;
+  color: #71717a;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.cp-autofill-learn-close:hover {
+  color: #fff;
+}
+
 .cp-autofill-learn-list {
-  padding: 8px 12px;
+  padding: 4px 12px;
   overflow-y: auto;
   flex: 1;
 }
@@ -289,8 +297,8 @@
 .cp-autofill-learn-item {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 8px;
+  gap: 8px;
+  padding: 8px 6px;
   border-bottom: 1px solid #27272a;
   cursor: pointer;
 }
@@ -325,7 +333,7 @@
 .cp-autofill-learn-actions {
   display: flex;
   gap: 8px;
-  padding: 14px 20px;
+  padding: 12px 16px;
   border-top: 1px solid #27272a;
   justify-content: flex-end;
 }
