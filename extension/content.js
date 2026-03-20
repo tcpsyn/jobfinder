@@ -2273,8 +2273,19 @@
         // Extract structured fields for more reliable AI analysis
         let structuredFields = extractFormData(formRoot);
 
+        // In iframes with no form fields, bail silently — avoids showing
+        // confusing overlays in tracking/footer/privacy iframes
+        if (isInIframe() && !structuredFields.length) {
+          removeOverlay();
+          return;
+        }
+
         // Enrich field hints (e.g. detect dial-code selects as country code fields)
-        structuredFields = enrichFieldHints(structuredFields);
+        try {
+          structuredFields = enrichFieldHints(structuredFields);
+        } catch (err) {
+          console.warn('[CareerPulse] enrichFieldHints failed:', err.message);
+        }
 
         // Apply ATS-specific field enhancement if adapter provides it
         if (atsAdapter?.enhanceExtraction) {

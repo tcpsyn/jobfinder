@@ -1,4 +1,7 @@
 // === Feed View ===
+// Map of normalized company name → app_status for companies with active applications
+let _companyAppMap = {};
+
 async function renderFeed(container) {
     focusedJobIndex = -1;
     currentOffset = 0;
@@ -240,7 +243,18 @@ async function loadJobs(append) {
         const data = await api.getJobs(params);
         const jobs = data.jobs || [];
 
-        if (!append) list.innerHTML = '';
+        if (!append) {
+            list.innerHTML = '';
+            _companyAppMap = {};
+        }
+
+        // Build company → status map for cross-referencing
+        for (const job of jobs) {
+            if (job.app_status && job.company) {
+                const key = job.company.trim().toLowerCase();
+                if (!_companyAppMap[key]) _companyAppMap[key] = job.app_status;
+            }
+        }
 
         if (jobs.length === 0 && currentOffset === 0) {
             list.innerHTML = `
@@ -497,6 +511,16 @@ function createJobCard(job) {
     const statusTag = safeStatus ? `<span class="status-badge status-${safeStatus}">${escapeHtml(job.app_status)}</span>` : '';
     const freshnessHtml = freshness ? `<span class="freshness-badge ${freshness.class}">${freshness.label}</span>` : '';
 
+    // Company-level indicator: show if another job at this company has an active application
+    let companyIndicator = '';
+    if (!job.app_status && job.company) {
+        const companyKey = job.company.trim().toLowerCase();
+        const companyStatus = _companyAppMap[companyKey];
+        if (companyStatus) {
+            companyIndicator = `<span class="company-app-indicator" title="You have an active application at ${escapeHtml(job.company)}">Active at company</span>`;
+        }
+    }
+
     let cardSalaryHtml = '';
     if (salary) {
         cardSalaryHtml = `<span>${salary}</span>`;
@@ -514,7 +538,7 @@ function createJobCard(job) {
                 ${newTag}
                 ${statusTag}
             </div>
-            <span class="job-card-company">${escapeHtml(job.company)}</span>
+            <span class="job-card-company">${escapeHtml(job.company)}${companyIndicator ? ` ${companyIndicator}` : ''}</span>
             <div class="job-card-meta">
                 ${job.location ? `<span>${escapeHtml(job.location)}</span>` : ''}
                 ${cardSalaryHtml}

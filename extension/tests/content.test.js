@@ -1989,6 +1989,21 @@ describe('startFillFlow ATS iframe delegation', () => {
     expect(overlay).toBeNull();
   });
 
+  it('silently removes overlay in iframe with no form fields', async () => {
+    // Simulate being in an iframe (window.self !== window.top)
+    Object.defineProperty(window, 'self', { value: {}, configurable: true });
+
+    // Empty page — no form fields
+    // startFillFlow should bail silently after extractFormData finds nothing
+    await api.startFillFlow();
+
+    const overlay = document.getElementById('cp-autofill-overlay');
+    expect(overlay).toBeNull();
+
+    // Restore
+    Object.defineProperty(window, 'self', { value: window, configurable: true });
+  });
+
   it('silently returns when in top frame with gh_jid URL param', async () => {
     // Simulate Greenhouse URL param without any DOM elements yet
     const origLocation = window.location.href;

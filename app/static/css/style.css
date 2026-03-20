@@ -450,6 +450,16 @@ a:hover {
     color: #a78bfa;
 }
 
+.status-offered {
+    background: #fefce8;
+    color: #ca8a04;
+}
+
+[data-theme="dark"] .status-offered {
+    background: #422006;
+    color: #facc15;
+}
+
 .status-rejected {
     background: #fef2f2;
     color: var(--danger);
@@ -458,6 +468,19 @@ a:hover {
 [data-theme="dark"] .status-rejected {
     background: #450a0a;
     color: var(--danger);
+}
+
+.company-app-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    border-radius: var(--radius-full);
+    background: var(--accent-light);
+    color: var(--accent);
+    white-space: nowrap;
 }
 
 /* === Source Tag === */
