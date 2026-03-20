@@ -2,13 +2,15 @@
 
 [![CI](https://github.com/tcpsyn/CareerPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/tcpsyn/CareerPulse/actions/workflows/ci.yml)
 
-Self-hosted job discovery and application tool. Scrapes jobs from multiple boards, scores them against your resume using AI, and helps prepare tailored applications.
+CareerPulse is a self-hosted job search automation platform. It scrapes 14 job boards, scores listings against your resume with AI, generates tailored resumes and cover letters, auto-fills ATS forms via a Chrome extension, and tracks your pipeline from first contact to offer — all running on your own hardware.
+
+Your data stays on your machine. No SaaS subscription, no resume uploaded to a third-party server, no profile data leaving your network. Use Ollama for fully local AI inference, or bring your own API key for cloud providers.
 
 ## Features
 
-- **Multi-source scraping** — 14 sources: LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy, Indeed, RemoteOK, Himalayas, Wellfound, BuiltIn, Greenhouse, Adzuna
-- **AI-powered matching** — Scores jobs 0-100 against your resume with reasons and concerns
-- **Chrome extension autofill** — Auto-fills job applications on any ATS (Workday, Greenhouse, Lever, iCIMS, Taleo, custom forms) using AI
+- **Multi-source scraping** — 14 sources with built-in exponential backoff, per-domain rate limiting, and randomized UA rotation: LinkedIn, Dice, Remotive, Hacker News, USA Jobs, Arbeitnow, Jobicy, Indeed, RemoteOK, Himalayas, Wellfound, BuiltIn, Greenhouse, Adzuna
+- **AI-powered matching** — Scores jobs 0-100 against your resume with match reasons, concerns, and skill gap analysis. Supports 5 AI providers: Anthropic, OpenAI, Google Gemini, OpenRouter, or Ollama for fully local inference
+- **Chrome extension autofill** — Auto-fills job applications on any ATS (Workday, Greenhouse, Lever, iCIMS, Taleo, Google Forms) using AI
 - **Comprehensive profile** — Personal info, work history, education, skills, certifications, languages, references, EEO responses
 - **Resume analysis** — Extracts skills, suggests job titles, rates ATS compatibility
 - **Application prep** — Generates tailored resumes and cover letters per job
@@ -27,7 +29,11 @@ Self-hosted job discovery and application tool. Scrapes jobs from multiple board
 - **Daily digest** — Summary of new high-scoring matches with copy-to-clipboard
 - **CSV export** — Export your entire job pipeline to a spreadsheet
 - **Keyboard shortcuts** — Power-user navigation (j/k, ?, /, d, p, o, s)
-- **Configurable AI backend** — Anthropic, OpenAI, Google Gemini, OpenRouter, or Ollama (local)
+- **Guided onboarding** — 4-step first-run wizard covers profile setup, resume upload, and AI provider configuration
+- **Drag-and-drop pipeline** — Move applications between stages visually; fallback click-to-move for accessibility
+- **Skill gap analysis** — Matching surfaces specific skills your resume is missing for each job
+- **Mobile-responsive UI** — Hamburger nav and touch-friendly layout work across screen sizes
+- **Configurable AI backend** — 5 providers: Anthropic, OpenAI, Google Gemini, OpenRouter, or Ollama. Ollama runs entirely on your hardware — no API keys, no data egress
 - **Job filters** — Score threshold, work type, employment type, location, keyword search, exclude terms
 - **Automated scheduling** — Periodic scraping with APScheduler
 - **Persistent data** — SQLite database survives restarts via Docker volume mount
