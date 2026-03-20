@@ -31,6 +31,40 @@ def make_dedup_hash(title: str, company: str, url: str) -> str:
     return hashlib.sha256(normalized.encode()).hexdigest()
 
 
+_US_STATES = {
+    "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar",
+    "california": "ca", "colorado": "co", "connecticut": "ct", "delaware": "de",
+    "florida": "fl", "georgia": "ga", "hawaii": "hi", "idaho": "id",
+    "illinois": "il", "indiana": "in", "iowa": "ia", "kansas": "ks",
+    "kentucky": "ky", "louisiana": "la", "maine": "me", "maryland": "md",
+    "massachusetts": "ma", "michigan": "mi", "minnesota": "mn", "mississippi": "ms",
+    "missouri": "mo", "montana": "mt", "nebraska": "ne", "nevada": "nv",
+    "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+    "north carolina": "nc", "north dakota": "nd", "ohio": "oh", "oklahoma": "ok",
+    "oregon": "or", "pennsylvania": "pa", "rhode island": "ri", "south carolina": "sc",
+    "south dakota": "sd", "tennessee": "tn", "texas": "tx", "utah": "ut",
+    "vermont": "vt", "virginia": "va", "washington": "wa", "west virginia": "wv",
+    "wisconsin": "wi", "wyoming": "wy", "district of columbia": "dc",
+}
+
+
+def _build_us_location_patterns() -> list[str]:
+    """Build LIKE patterns for matching US locations."""
+    patterns = [
+        "%united states%", "%usa%", "% us", "%, us,%", "%, us %",
+        "%- us", "%- us %", "%- us,%", "%u.s.%",
+        "%remote - us%", "%remote, us%", "%remote (us%",
+    ]
+    for state_name, abbrev in _US_STATES.items():
+        patterns.append(f"%{state_name}%")
+        patterns.append(f"%, {abbrev}")
+        patterns.append(f"%, {abbrev} %")
+        patterns.append(f"%, {abbrev},%")
+        patterns.append(f"%, {abbrev};%")
+        patterns.append(f"%, {abbrev}/%")
+    return patterns
+
+
 def _normalize_company(name: str) -> str:
     """Normalize company name for fuzzy comparison."""
     name = name.lower().strip()
@@ -1086,8 +1120,14 @@ class Database:
         elif employment_type == "parttime":
             query += " AND (LOWER(j.title) LIKE '%part%time%' OR LOWER(j.description) LIKE '%part%time%')"
         if location:
-            query += " AND LOWER(j.location) LIKE ?"
-            params.append(f"%{location.lower()}%")
+            if location.lower() in ("united states", "us", "usa", "u.s.", "u.s.a."):
+                us_patterns = _build_us_location_patterns()
+                clauses = " OR ".join("LOWER(j.location) LIKE ?" for _ in us_patterns)
+                query += f" AND ({clauses})"
+                params.extend(us_patterns)
+            else:
+                query += " AND LOWER(j.location) LIKE ?"
+                params.append(f"%{location.lower()}%")
         if exclude_terms:
             for term in exclude_terms:
                 query += " AND LOWER(j.title) NOT LIKE ? AND LOWER(j.description) NOT LIKE ?"
